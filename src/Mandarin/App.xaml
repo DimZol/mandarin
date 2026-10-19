@@ -1,0 +1,16 @@
+<Application x:Class="Mandarin.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown"
+             ThemeMode="System">
+    <Application.Resources>
+        <!-- Tangerine accent instead of the system one: sliders, selection, check boxes -->
+        <Color x:Key="SystemAccentColor">#F26B1D</Color>
+        <Color x:Key="SystemAccentColorLight1">#F5823D</Color>
+        <Color x:Key="SystemAccentColorLight2">#F89A5E</Color>
+        <Color x:Key="SystemAccentColorLight3">#FBB585</Color>
+        <Color x:Key="SystemAccentColorDark1">#D95A10</Color>
+        <Color x:Key="SystemAccentColorDark2">#B84A0B</Color>
+        <Color x:Key="SystemAccentColorDark3">#933A07</Color>
+    </Application.Resources>
+</Application>

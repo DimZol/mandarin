@@ -1,0 +1,16 @@
+# Build output
+bin/
+bin*/
+obj/
+dist/
+artifacts/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
