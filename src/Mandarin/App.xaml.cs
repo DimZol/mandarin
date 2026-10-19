@@ -24,6 +24,9 @@ public partial class App : Application
         Environment.CurrentDirectory = AppContext.BaseDirectory;
         AppSettings.Load();
         L.Init(AppSettings.Current.Language);
+        // --lang=English|Russian overrides the interface language for this run only, settings stay unchanged
+        var langArg = e.Args.FirstOrDefault(a => a.StartsWith("--lang=", StringComparison.OrdinalIgnoreCase));
+        if (langArg != null && Enum.TryParse<AppLanguage>(langArg[7..], true, out var lang)) L.Init(lang);
 
         _single = new SingleInstance();
         if (!_single.IsFirst)
@@ -90,6 +93,7 @@ public partial class App : Application
 
     void HandleArgs(string[] args)
     {
+        if (args.Contains("--exit")) { ExitApp(); return; }
         var files = args.Where(a => !a.StartsWith("--") && (File.Exists(a) || Directory.Exists(a))).ToList();
         if (args.Contains("--show") && files.Count == 0) { HomeWindow.ShowSingle(); return; }
         if (args.Contains("--shelf")) { ShelfWindow.Toggle(); return; }

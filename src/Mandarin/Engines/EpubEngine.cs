@@ -49,7 +49,7 @@ public static class EpubEngine
             {
                 var attr = img.Name == "image" ? (img.Attributes["xlink:href"] ?? img.Attributes["href"]) : img.Attributes["src"];
                 if (attr == null) continue;
-                var imgPath = Combine(chapterDir, Uri.UnescapeDataString(WebUtility.HtmlDecode(attr.Value)));
+                var imgPath = Combine(chapterDir, Uri.UnescapeDataString(WebUtility.HtmlDecode(attr.Value) ?? ""));
                 var imgEntry = zip.GetEntry(imgPath);
                 if (imgEntry == null) continue;
                 using var s = imgEntry.Open();

@@ -59,6 +59,12 @@ public static class Program
                     code = await GestureTest.RunAsync(Path.Combine(root, "in", "photo.jpg"), Path.Combine(root, "shots", "00-live-wheel.png"),
                         0, Formats.TargetsFor(new[] { Path.Combine(root, "in", "photo.jpg") }).Count, AppSettings.Current.WheelSize);
                 }
+                else if (filter == "record")
+                {
+                    AppSettings.Load();
+                    var photo = Environment.GetEnvironmentVariable("MANDARIN_DEMO_PHOTO") ?? Path.Combine(root, "in", "photo.jpg");
+                    code = await DemoRecorder.RunAsync(root, photo, Formats.TargetsFor(new[] { photo }).Count, AppSettings.Current.WheelSize);
+                }
                 else code = await RunAsync(root, filter);
             }
             catch (Exception ex) { Console.WriteLine("FATAL: " + ex); code = 1; }

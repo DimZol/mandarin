@@ -387,10 +387,13 @@ public sealed class WheelWindow : Window
         var center = Center;
         if (_hover >= 0 && _hover < _items.Count)
         {
-            _centerThumb.Visibility = Visibility.Collapsed;
+            // keep the file thumbnail visible and put the action title under it
+            var hoverThumb = _files.Count > 0 ? ShellThumbs.Get(_files[0], 128) : null;
+            _centerThumb.Source = hoverThumb;
+            _centerThumb.Visibility = hoverThumb != null ? Visibility.Visible : Visibility.Collapsed;
             _centerTitle.Text = _items[_hover].Title;
-            _centerSub.Text = Catalog.Describe(_files);
-            Canvas.SetTop(_centerTitle, center.Y - 22);
+            _centerSub.Text = hoverThumb != null ? "" : Catalog.Describe(_files);
+            Canvas.SetTop(_centerTitle, hoverThumb != null ? center.Y + RC * 0.1 : center.Y - 22);
             Canvas.SetTop(_centerSub, center.Y + 12);
             return;
         }

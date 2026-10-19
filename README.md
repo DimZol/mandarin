@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/wheel-convert.png" width="420" alt="Conversion wheel">
+  <img src="docs/screenshots/convert.gif" width="760" alt="Dragging a photo in File Explorer, tapping Shift and dropping it on PNG">
 </p>
 
 ## How it works
@@ -24,6 +24,12 @@ the result appears next to the original. The original is never modified.
 | **Shift** | Convert to another format |
 | **Ctrl** | Tools: compress, crop, trim, metadata, split, join, redact, background… |
 | **Alt** | Actions: share, shelf, copy, move, copy path, terminal, ZIP |
+
+<p align="center">
+  <img src="docs/screenshots/wheel-convert.png" width="270" alt="Convert wheel">
+  <img src="docs/screenshots/wheel-tools.png" width="270" alt="Tools wheel">
+  <img src="docs/screenshots/wheel-actions.png" width="270" alt="Actions wheel">
+</p>
 
 Keys can be changed in settings. Release the file in the center of the wheel (or press Esc) to cancel.
 
@@ -68,11 +74,6 @@ move to a folder, copy path, open in Terminal, pack into ZIP.
 
 <p align="center">
   <img src="docs/screenshots/home.png" width="720" alt="Main window">
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/wheel-tools.png" width="300" alt="Tools wheel">
-  <img src="docs/screenshots/wheel-actions.png" width="300" alt="Actions wheel">
 </p>
 
 <p align="center">
@@ -132,6 +133,10 @@ matter of adding one JSON file.
 2. Extract it anywhere (for example `%LOCALAPPDATA%\Programs\Mandarin`) and run `Mandarin.exe`.
 3. Optionally enable **Start Mandarin with Windows** on the home screen so the wheel is always available.
 
+Command line: `Mandarin.exe <files>` opens the wheel for the files, `--background` starts in the tray only,
+`--show` opens the main window, `--shelf` toggles the shelf, `--exit` closes the running instance and
+`--lang=English` (or `Russian`) sets the interface language for that run without changing the settings.
+
 ## Building from source
 
 ```powershell
@@ -144,6 +149,9 @@ Engine self-test (creates its test files only inside the given folder):
 ```powershell
 dotnet run --project tests\Mandarin.SelfTest -- C:\Temp\mandarin-test
 ```
+
+The same tool renders the screenshots off screen (`-- <folder> ui`) and records the demo GIF frames with a
+running Mandarin instance (`-- <folder> record`; it moves the mouse for about 15 seconds).
 
 ## Project layout
 
@@ -163,3 +171,7 @@ tests/Mandarin.SelfTest   runs every conversion and tool on generated files
 ## License
 
 [MIT](LICENSE). Third-party components are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+The photo in the screenshots is
+[Citrus reticulata fruit 2009 G1.jpg](https://commons.wikimedia.org/wiki/File:Citrus_reticulata_fruit_2009_G1.jpg)
+by George Chernilevsky, public domain, via Wikimedia Commons.

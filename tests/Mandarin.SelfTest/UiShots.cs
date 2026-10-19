@@ -21,14 +21,14 @@ public static class UiShots
         res["SystemAccentColor"] = Color.FromRgb(0xF2, 0x6B, 0x1D); res["SystemAccentColorLight1"] = Color.FromRgb(0xF5, 0x82, 0x3D);
         res["SystemAccentColorLight2"] = Color.FromRgb(0xF8, 0x9A, 0x5E); res["SystemAccentColorLight3"] = Color.FromRgb(0xFB, 0xB5, 0x85);
         res["SystemAccentColorDark1"] = Color.FromRgb(0xD9, 0x5A, 0x10); res["SystemAccentColorDark2"] = Color.FromRgb(0xB8, 0x4A, 0x0B); res["SystemAccentColorDark3"] = Color.FromRgb(0x93, 0x3A, 0x07);
-        string In(string n) => Path.Combine(inDir, n);
+        string In(string n) => n == "photo.jpg" && Environment.GetEnvironmentVariable("MANDARIN_DEMO_PHOTO") is { Length: > 0 } demo ? demo : Path.Combine(inDir, n);
 
         await Shot(() => HomeWindow.CreatePreview("home"), Path.Combine(shots, "01-home.png"), 1200);
         await Shot(() => HomeWindow.CreatePreview("settings"), Path.Combine(shots, "02-settings.png"), 800);
         await Shot(() => HomeWindow.CreatePreview("formats"), Path.Combine(shots, "03-formats.png"), 800);
-        await Shot(() => WheelWindow.CreatePreview(WheelMode.Convert, new[] { In("photo.jpg") }, 1), Path.Combine(shots, "04-wheel-convert.png"), 600, transparent: true);
-        await Shot(() => WheelWindow.CreatePreview(WheelMode.Tools, new[] { In("photo.jpg") }, 0), Path.Combine(shots, "05-wheel-tools.png"), 600, transparent: true);
-        await Shot(() => WheelWindow.CreatePreview(WheelMode.Actions, new[] { In("clip.mp4") }, 2), Path.Combine(shots, "06-wheel-actions.png"), 600, transparent: true);
+        await Shot(() => WheelWindow.CreatePreview(WheelMode.Convert, new[] { In("photo.jpg") }, 0), Path.Combine(shots, "04-wheel-convert.png"), 600, transparent: true);
+        await Shot(() => WheelWindow.CreatePreview(WheelMode.Tools, new[] { In("photo.jpg") }, 2), Path.Combine(shots, "05-wheel-tools.png"), 600, transparent: true);
+        await Shot(() => WheelWindow.CreatePreview(WheelMode.Actions, new[] { In("photo.jpg") }, 0), Path.Combine(shots, "06-wheel-actions.png"), 600, transparent: true);
         await Shot(() => WheelWindow.CreatePreview(WheelMode.Tools, new[] { In("clip.mp4") }, 3), Path.Combine(shots, "07-wheel-video-tools.png"), 600, transparent: true);
         await Shot(() => new PhotoEditorWindow(In("photo.jpg")), Path.Combine(shots, "08-photo-editor.png"), 2500);
         await Shot(() => new AnnotateWindow(In("photo.jpg")), Path.Combine(shots, "09-annotate.png"), 2000);
