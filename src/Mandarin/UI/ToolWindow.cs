@@ -48,6 +48,16 @@ public class ToolWindow : Window
 
         SourceInitialized += (_, _) => Native.ApplyWindowChrome(new WindowInteropHelper(this).Handle, Theme.IsDark);
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+
+        // header, content and buttons arrive one after another; a form builds up row by row
+        Motion.SetSkipEntrance(this, true);
+        Loaded += (_, _) =>
+        {
+            Motion.Entrance(header, 0, 10);
+            if (Body.Content is StackPanel form) Motion.Stagger(form, 22, 60, 10);
+            else if (Body.Content is UIElement body) Motion.Entrance(body, 60, 14);
+            Motion.Entrance(FooterBar, 160, 8);
+        };
     }
 
     protected Button AddButton(string text, Action onClick, bool primary = false)
@@ -195,8 +205,12 @@ public static class Ui
             {
                 foreach (var s in swatches) { s.BorderThickness = new Thickness(1); s.BorderBrush = Theme.Brush(0x80, 0x80, 0x80, 0x80); }
                 sw.BorderThickness = new Thickness(3); sw.BorderBrush = Theme.Brush(Theme.AccentDark);
+                if (Motion.Scale(sw) is { } st) Motion.ScaleFromTo(st, 0.8, 1.15, 300, Motion.Spring);
                 onPick(color);
             };
+            // swatches grow under the mouse
+            sw.MouseEnter += (_, _) => { if (Motion.Scale(sw) is { } st) Motion.ScaleTo(st, 1.15, 180, Motion.Spring); };
+            sw.MouseLeave += (_, _) => { if (Motion.Scale(sw) is { } st) Motion.ScaleTo(st, 1, 200); };
             swatches.Add(sw);
             panel.Children.Add(sw);
         }

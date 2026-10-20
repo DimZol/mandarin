@@ -17,8 +17,11 @@ public sealed class ShelfWindow : Window
     readonly WrapPanel _items = new() { Orientation = Orientation.Horizontal };
     readonly TextBlock _empty;
     readonly List<string> _files = new();
+    readonly HashSet<string> _shown = new(StringComparer.OrdinalIgnoreCase);
+    readonly Border _panel;
     Point _dragStart;
     string? _dragCandidate;
+    bool _left, _closeAnimated;
 
     ShelfWindow()
     {
@@ -33,6 +36,7 @@ public sealed class ShelfWindow : Window
         SizeToContent = SizeToContent.Height;
         AllowDrop = true;
         FontFamily = Theme.UiFont;
+        Motion.SetSkipEntrance(this, true);
 
         var dark = Theme.IsDark;
         var fg = dark ? Theme.Brush(0xF0, 0xF0, 0xF0) : Theme.Brush(0x20, 0x20, 0x20);
@@ -44,9 +48,9 @@ public sealed class ShelfWindow : Window
 
         var header = new DockPanel { Margin = new Thickness(12, 8, 6, 4), Background = Brushes.Transparent };
         var close = HeaderButton("", L.T("Close the shelf"), () => { _files.Clear(); Persist(); Close(); });
-        var clear = HeaderButton("", L.T("Clear"), () => { _files.Clear(); Refresh(); });
-        var dockLeft = HeaderButton("", L.T("Pin to the left"), () => Dock(left: true));
-        var dockRight = HeaderButton("", L.T("Pin to the right"), () => Dock(left: false));
+        var clear = HeaderButton("", L.T("Clear"), ClearAnimated);
+        var dockLeft = HeaderButton("", L.T("Pin to the left"), () => Dock(left: true, animate: true));
+        var dockRight = HeaderButton("", L.T("Pin to the right"), () => Dock(left: false, animate: true));
         foreach (var b in new[] { close, clear, dockRight, dockLeft }) { DockPanel.SetDock(b, System.Windows.Controls.Dock.Right); header.Children.Add(b); }
         header.Children.Add(new TextBlock { Text = L.T("Shelf"), FontWeight = FontWeights.SemiBold, Foreground = fg, VerticalAlignment = VerticalAlignment.Center, FontSize = 13 });
         header.MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) DragMove(); };
@@ -56,7 +60,7 @@ public sealed class ShelfWindow : Window
         stack.Children.Add(_empty);
         stack.Children.Add(new ScrollViewer { Content = _items, MaxHeight = 520, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(6, 0, 6, 8) });
 
-        Content = new Border
+        _panel = new Border
         {
             Margin = new Thickness(12),
             Background = dark ? Theme.Brush(0x2A, 0x2A, 0x2A, 0xF5) : Theme.Brush(0xF8, 0xF8, 0xF8, 0xF7),
@@ -64,6 +68,7 @@ public sealed class ShelfWindow : Window
             BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Child = stack,
             Effect = new DropShadowEffect { BlurRadius = 22, ShadowDepth = 3, Opacity = dark ? 0.5 : 0.2, Color = Colors.Black }
         };
+        Content = _panel;
 
         DragOver += (_, e) =>
         {
@@ -78,7 +83,21 @@ public sealed class ShelfWindow : Window
             e.Effects = DragDropEffects.Link;
             e.Handled = true;
         };
-        Loaded += (_, _) => Dock(left: false);
+        Loaded += (_, _) =>
+        {
+            Dock(left: false, animate: false);
+            Motion.Entrance(_panel, 0, 0, 360, 48); // slides in from the right edge
+        };
+        // the shelf slides back out towards its edge before it closes
+        Closing += (_, e) =>
+        {
+            if (_closeAnimated || !Motion.Enabled) return;
+            e.Cancel = true;
+            _closeAnimated = true;
+            IsHitTestVisible = false;
+            if (Motion.Translate(_panel) is { } t) Motion.To(t, TranslateTransform.XProperty, _left ? -48 : 48, 220, Motion.EaseInOut);
+            Motion.FromTo(_panel, OpacityProperty, _panel.Opacity, 0, 220, Motion.EaseInOut, 0, Close);
+        };
     }
 
     Button HeaderButton(string glyph, string tip, Action click)
@@ -93,13 +112,23 @@ public sealed class ShelfWindow : Window
         return b;
     }
 
-    void Dock(bool left)
+    void Dock(bool left, bool animate)
     {
         var (x, y) = Native.CursorPos();
         var (work, scale) = Native.MonitorAt(x, y);
         UpdateLayout();
-        Left = left ? work.Left / scale : work.Right / scale - ActualWidth;
-        Top = (work.Top + (work.Bottom - work.Top) / 2) / scale - ActualHeight / 2;
+        _left = left;
+        var targetLeft = left ? work.Left / scale : work.Right / scale - ActualWidth;
+        var targetTop = (work.Top + (work.Bottom - work.Top) / 2) / scale - ActualHeight / 2;
+        if (!animate || !Motion.Enabled)
+        {
+            BeginAnimation(LeftProperty, null); BeginAnimation(TopProperty, null);
+            Left = targetLeft; Top = targetTop;
+            return;
+        }
+        // glide across the screen to the chosen edge
+        Motion.FromTo(this, LeftProperty, Left, targetLeft, 420, Motion.EaseInOut);
+        Motion.FromTo(this, TopProperty, Top, targetTop, 420, Motion.EaseInOut);
     }
 
     public static void AddFiles(IEnumerable<string> files)
@@ -139,16 +168,38 @@ public sealed class ShelfWindow : Window
         AppSettings.Save();
     }
 
+    /// <summary>Every tile fades away together, then the shelf is emptied.</summary>
+    void ClearAnimated()
+    {
+        if (_items.Children.Count == 0) { _files.Clear(); Refresh(); return; }
+        _items.IsHitTestVisible = false;
+        Motion.FromTo(_items, OpacityProperty, 1, 0, 180, Motion.EaseInOut, 0, () =>
+        {
+            _files.Clear();
+            Refresh();
+            _items.IsHitTestVisible = true;
+            _items.Opacity = 1;
+        });
+    }
+
     void Refresh()
     {
         _files.RemoveAll(f => !File.Exists(f) && !Directory.Exists(f));
         _items.Children.Clear();
+        var wasEmpty = _empty.Visibility == Visibility.Visible;
         _empty.Visibility = _files.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_files.Count == 0 && !wasEmpty) Motion.Entrance(_empty, 0, 6);
         var fg = Theme.IsDark ? Theme.Brush(0xE8, 0xE8, 0xE8) : Theme.Brush(0x25, 0x25, 0x25);
+        var added = 0;
         foreach (var f in _files)
         {
             var tile = new StackPanel { Width = 96, Margin = new Thickness(3), Cursor = Cursors.Hand, Background = Brushes.Transparent, ToolTip = f };
-            tile.Children.Add(new Image { Source = ShellThumbs.Get(f, 96), Width = 64, Height = 64, Stretch = Stretch.Uniform, Margin = new Thickness(0, 4, 0, 4) });
+            var thumb = new Image { Source = ShellThumbs.Get(f, 96), Width = 64, Height = 64, Stretch = Stretch.Uniform, Margin = new Thickness(0, 4, 0, 4) };
+            tile.Children.Add(thumb);
+            // the tile rises a little and its thumbnail grows under the mouse
+            Motion.HoverLift(tile, 2);
+            tile.MouseEnter += (_, _) => { if (Motion.Scale(thumb) is { } s) Motion.ScaleTo(s, 1.08, 200, Motion.Spring); };
+            tile.MouseLeave += (_, _) => { if (Motion.Scale(thumb) is { } s) Motion.ScaleTo(s, 1, 220); };
             tile.Children.Add(new TextBlock
             {
                 Text = Path.GetFileName(f.TrimEnd('\\')), FontSize = 11, Foreground = fg, TextAlignment = TextAlignment.Center,
@@ -179,11 +230,14 @@ public sealed class ShelfWindow : Window
             var open = new MenuItem { Header = L.T("Open") }; open.Click += (_, _) => Integration.Open(path);
             var reveal = new MenuItem { Header = L.T("Show in folder") }; reveal.Click += (_, _) => Integration.RevealInExplorer(path);
             var wheel = new MenuItem { Header = L.T("Convert…") }; wheel.Click += (_, _) => WheelWindow.ShowForFiles(new[] { path });
-            var remove = new MenuItem { Header = L.T("Remove from the shelf") }; remove.Click += (_, _) => { _files.Remove(path); Refresh(); };
+            var remove = new MenuItem { Header = L.T("Remove from the shelf") }; remove.Click += (_, _) => Motion.PopOut(tile, () => { _files.Remove(path); Refresh(); });
             tile.ContextMenu.Items.Add(open); tile.ContextMenu.Items.Add(reveal); tile.ContextMenu.Items.Add(wheel);
             tile.ContextMenu.Items.Add(new Separator()); tile.ContextMenu.Items.Add(remove);
             _items.Children.Add(tile);
+            // files that just arrived pop in one after another
+            if (_shown.Add(path)) Motion.Pop(tile, 0.6, added++ * 45);
         }
+        _shown.IntersectWith(_files);
         Persist();
     }
 }

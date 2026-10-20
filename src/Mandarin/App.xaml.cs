@@ -37,6 +37,7 @@ public partial class App : Application
         }
 
         ApplyTheme();
+        Motion.Init();
         DispatcherUnhandledException += OnUnhandled;
         TaskScheduler.UnobservedTaskException += (_, ev) => { Log.Error("Unobserved task", ev.Exception); ev.SetObserved(); };
         Log.Info($"Starting Mandarin {typeof(App).Assembly.GetName().Version}");

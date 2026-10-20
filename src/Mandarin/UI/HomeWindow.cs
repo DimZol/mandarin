@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Mandarin.Core;
@@ -53,9 +54,15 @@ public sealed class HomeWindow : Window
                  })
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 6, 4, 6) };
-            row.Children.Add(new TextBlock { Text = glyph, FontFamily = Theme.IconFont, FontSize = 16, Width = 28, VerticalAlignment = VerticalAlignment.Center });
+            var navIcon = new TextBlock { Text = glyph, FontFamily = Theme.IconFont, FontSize = 16, Width = 28, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(navIcon);
             row.Children.Add(new TextBlock { Text = text, FontSize = 14, VerticalAlignment = VerticalAlignment.Center });
-            _nav.Items.Add(new ListBoxItem { Content = row, Tag = key, Margin = new Thickness(6, 1, 6, 1) });
+            var navItem = new ListBoxItem { Content = row, Tag = key, Margin = new Thickness(6, 1, 6, 1) };
+            // the row nudges right under the mouse; the icon bounces when the page is chosen
+            navItem.MouseEnter += (_, _) => { if (Motion.Translate(row) is { } t) Motion.To(t, TranslateTransform.XProperty, 3, 160); };
+            navItem.MouseLeave += (_, _) => { if (Motion.Translate(row) is { } t) Motion.To(t, TranslateTransform.XProperty, 0, 220); };
+            navItem.Selected += (_, _) => { if (IsLoaded && Motion.Scale(navIcon) is { } s) Motion.ScaleFromTo(s, 0.7, 1, 380, Motion.Spring); };
+            _nav.Items.Add(navItem);
         }
         _nav.BorderThickness = new Thickness(0);
         _nav.Background = Brushes.Transparent;
@@ -116,11 +123,17 @@ public sealed class HomeWindow : Window
             if ((string)item.Tag == key) { _nav.SelectedItem = item; break; }
     }
 
-    void Navigate(string key) => _page.Content = new ScrollViewer
+    void Navigate(string key)
     {
-        Content = new Border { Padding = new Thickness(36, 28, 36, 32), Child = _pages[key]() },
-        VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-    };
+        var page = _pages[key]();
+        _page.Content = new ScrollViewer
+        {
+            Content = new Border { Padding = new Thickness(36, 28, 36, 32), Child = page },
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+        // the first page comes in with the window itself; later pages build up block by block
+        if (IsLoaded && page is Panel panel) Motion.Stagger(panel, 26, 0, 14);
+    }
 
     public static void PickFilesAndShowWheel()
     {
@@ -142,26 +155,51 @@ public sealed class HomeWindow : Window
 
         // drop zone
         var dropText = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        dropText.Children.Add(new TextBlock { Text = "", FontFamily = Theme.IconFont, FontSize = 34, HorizontalAlignment = HorizontalAlignment.Center, Foreground = Theme.Brush(Theme.Accent) });
+        var arrow = new TextBlock { Text = "\uE898", FontFamily = Theme.IconFont, FontSize = 34, HorizontalAlignment = HorizontalAlignment.Center, Foreground = Theme.Brush(Theme.Accent) };
+        dropText.Children.Add(arrow);
         dropText.Children.Add(new TextBlock { Text = L.T("Drop files or folders here"), FontSize = 16, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 4) });
         dropText.Children.Add(new TextBlock { Text = L.T("the wheel opens with every option"), Opacity = 0.7, HorizontalAlignment = HorizontalAlignment.Center });
         var pick = new Button { Content = L.T("Choose files…"), Padding = new Thickness(16, 6, 16, 7), Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
         pick.Click += (_, _) => PickFilesAndShowWheel();
         dropText.Children.Add(pick);
+        var tint = new SolidColorBrush(Color.FromArgb(14, Theme.Accent.R, Theme.Accent.G, Theme.Accent.B));
         var dashed = new Rectangle
         {
             Stroke = Theme.Brush(Theme.Accent), StrokeThickness = 1.5, StrokeDashArray = new DoubleCollection { 6, 4 }, RadiusX = 14, RadiusY = 14,
-            Fill = Theme.Brush(Theme.Accent.R, Theme.Accent.G, Theme.Accent.B, 14)
+            Fill = tint
         };
         var drop = new Grid { Height = 210, AllowDrop = true, Background = Brushes.Transparent };
         drop.Children.Add(dashed);
         drop.Children.Add(dropText);
         drop.DragOver += (_, e) => { e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
-        drop.DragEnter += (_, _) => dashed.StrokeThickness = 3;
-        drop.DragLeave += (_, _) => dashed.StrokeThickness = 1.5;
+
+        // the zone brightens under the mouse; while a file is dragged over it the border marches
+        // and the arrow bobs, inviting the drop
+        drop.MouseEnter += (_, _) => Motion.ColorTo(tint, Color.FromArgb(26, Theme.Accent.R, Theme.Accent.G, Theme.Accent.B), 160);
+        drop.MouseLeave += (_, _) => Motion.ColorTo(tint, Color.FromArgb(14, Theme.Accent.R, Theme.Accent.G, Theme.Accent.B), 240);
+        void Excite(bool on)
+        {
+            Motion.ColorTo(tint, Color.FromArgb((byte)(on ? 40 : 14), Theme.Accent.R, Theme.Accent.G, Theme.Accent.B), 180);
+            Motion.To(dashed, Shape.StrokeThicknessProperty, on ? 2.5 : 1.5, 180);
+            if (!Motion.Enabled) return;
+            if (on)
+            {
+                dashed.BeginAnimation(Shape.StrokeDashOffsetProperty, new DoubleAnimation(0, -10, TimeSpan.FromMilliseconds(600)) { RepeatBehavior = RepeatBehavior.Forever });
+                if (Motion.Translate(arrow) is { } t)
+                    t.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -7, TimeSpan.FromMilliseconds(420))
+                        { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = Motion.EaseInOut });
+            }
+            else
+            {
+                dashed.BeginAnimation(Shape.StrokeDashOffsetProperty, null);
+                if (Motion.Translate(arrow) is { } t) Motion.To(t, TranslateTransform.YProperty, 0, 200);
+            }
+        }
+        drop.DragEnter += (_, _) => Excite(true);
+        drop.DragLeave += (_, _) => Excite(false);
         drop.Drop += (_, e) =>
         {
-            dashed.StrokeThickness = 1.5;
+            Excite(false);
             if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
             {
                 e.Effects = DragDropEffects.Copy;
@@ -233,7 +271,19 @@ public sealed class HomeWindow : Window
         s.Children.Add(cap);
         s.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
         s.Children.Add(new TextBlock { Text = text, Opacity = 0.72, TextWrapping = TextWrapping.Wrap, FontSize = 12.5 });
-        return Ui.Card(s, new Thickness(16)).Also(b => b.Margin = new Thickness(0, 0, 10, 0));
+        var card = Ui.Card(s, new Thickness(16)).Also(b => b.Margin = new Thickness(0, 0, 10, 0));
+        // the card rises under the mouse and its key cap goes down, as if pressed
+        Motion.HoverLift(card);
+        void Press(bool down)
+        {
+            var thickness = down ? new Thickness(1, 1, 1, 1) : new Thickness(1, 1, 1, 3);
+            if (Motion.Translate(cap) is { } t) Motion.To(t, TranslateTransform.YProperty, down ? 2 : 0, down ? 110 : 260, down ? Motion.EaseOut : Motion.Spring);
+            if (!Motion.Enabled) { cap.BeginAnimation(Border.BorderThicknessProperty, null); cap.BorderThickness = thickness; return; }
+            cap.BeginAnimation(Border.BorderThicknessProperty, new ThicknessAnimation(thickness, TimeSpan.FromMilliseconds(down ? 110 : 220)) { EasingFunction = Motion.EaseOut });
+        }
+        card.MouseEnter += (_, _) => Press(true);
+        card.MouseLeave += (_, _) => Press(false);
+        return card;
     }
 
     static Grid StatusRow(bool ok, string title, string detail)
@@ -287,7 +337,7 @@ public sealed class HomeWindow : Window
             var targets = string.Join("  ", Formats.AllTargets(cat).Select(Formats.Label));
             s.Children.Add(new TextBlock { Text = L.T("Saves: ") + targets, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) });
             if (tools.Length > 0) s.Children.Add(new TextBlock { Text = tools, FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) });
-            wrap.Children.Add(Ui.Card(s).Also(b => b.Margin = new Thickness(0, 0, 10, 10)));
+            wrap.Children.Add(Ui.Card(s).Also(b => b.Margin = new Thickness(0, 0, 10, 10)).Also(b => Motion.HoverLift(b)));
         }
         stack.Children.Add(wrap);
         stack.Children.Add(H2(L.T("Actions for any files")));
@@ -328,7 +378,7 @@ public sealed class HomeWindow : Window
                 Grid.SetColumn(btns, 2);
                 row.Children.Add(btns);
             }
-            stack.Children.Add(Ui.Card(row, new Thickness(12, 10, 12, 10)));
+            stack.Children.Add(Ui.Card(row, new Thickness(12, 10, 12, 10)).Also(b => Motion.HoverLift(b, 2)));
         }
         return stack;
     }

@@ -37,6 +37,10 @@ the result appears next to the original. The original is never modified.
 
 Keys can be changed in settings. Release the file in the center of the wheel (or press Esc) to cancel.
 
+The interface is animated throughout: the wheel unfolds sector by sector, the option under the cursor lights up
+and moves outward, progress cards slide in and fold away, and pages, cards and buttons respond to the mouse.
+Turning off *Animation effects* in Windows settings turns the animations off in Mandarin too.
+
 No gesture needed if you prefer clicks: drop files on the Mandarin window, use **Choose files…** in the
 tray menu, or enable **Send to → Mandarin** in the Explorer context menu.
 
@@ -154,8 +158,9 @@ Engine self-test (creates its test files only inside the given folder):
 dotnet run --project tests\Mandarin.SelfTest -- C:\Temp\mandarin-test
 ```
 
-The same tool renders the screenshots off screen (`-- <folder> ui`) and records the demo GIF frames with a
-running Mandarin instance (`-- <folder> record`; it moves the mouse for about 15 seconds).
+The same tool renders the screenshots off screen (`-- <folder> ui`), records the animations off screen as
+frames and checks smooth scrolling (`-- <folder> motion`), and records the demo GIF frames with a running
+Mandarin instance (`-- <folder> record`; it moves the mouse for about 15 seconds).
 
 ## Project layout
 

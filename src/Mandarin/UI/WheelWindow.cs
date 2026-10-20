@@ -31,8 +31,7 @@ public sealed class WheelWindow : Window
     readonly double _size;
     readonly Canvas _canvas = new();
     readonly Grid _root = new();
-    readonly List<Path> _sectorPaths = new();
-    readonly List<(TextBlock glyph, TextBlock label)> _sectorTexts = new();
+    readonly List<SectorVisual> _sectors = new();
     readonly TextBlock _centerTitle = new(), _centerSub = new();
     readonly Image _centerThumb = new();
     readonly StackPanel _pill = new() { Orientation = Orientation.Horizontal };
@@ -40,6 +39,9 @@ public sealed class WheelWindow : Window
     Theme.WheelColors _c = Theme.Wheel;
 
     const double PillHeight = 44;
+
+    /// <summary>One sector: its own layer (scaled around the wheel center) and brushes that can be animated.</summary>
+    sealed record SectorVisual(Canvas Layer, ScaleTransform Scale, SolidColorBrush Fill, SolidColorBrush Stroke, SolidColorBrush Text);
 
     public static WheelWindow? Current { get; private set; }
 
@@ -71,6 +73,7 @@ public sealed class WheelWindow : Window
         AllowDrop = dragMode;
         FontFamily = Theme.UiFont;
         UseLayoutRounding = true;
+        Motion.SetSkipEntrance(this, true);
 
         _root.Children.Add(_canvas);
         _canvas.RenderTransformOrigin = new Point(0.5, (PillHeight + R + 6) / Height);
@@ -145,15 +148,21 @@ public sealed class WheelWindow : Window
     }
 
     /// <summary>Wheel for previews/screenshots: not tied to the cursor and visible right away.</summary>
-    public static WheelWindow CreatePreview(WheelMode mode, IReadOnlyList<string> files, int hover = -1)
+    public static WheelWindow CreatePreview(WheelMode mode, IReadOnlyList<string> files, int hover = -1, bool hidden = false)
     {
         var w = new WheelWindow(mode, files, false, int.MinValue, int.MinValue);
+        if (hidden) return w; // revealed later with PreviewReveal, to record the opening animation
         w._revealed = true;
         w._canvas.Opacity = 1;
         w._scale.ScaleX = w._scale.ScaleY = 1;
         if (hover >= 0) w.SetHover(hover);
         return w;
     }
+
+    // hooks for off-screen motion previews
+    public void PreviewReveal() => Reveal();
+    public void PreviewHover(int index) => SetHover(index);
+    public void PreviewChoose(int index) => CloseWheel(index);
 
     public static void OnGlobalButtonReleased()
     {
@@ -213,8 +222,7 @@ public sealed class WheelWindow : Window
     void Build()
     {
         _canvas.Children.Clear();
-        _sectorPaths.Clear();
-        _sectorTexts.Clear();
+        _sectors.Clear();
         _c = Theme.Wheel;
         _items = _files.Count > 0 ? Catalog.Items(_mode, _files) : new List<WheelItem>();
         var center = Center;
@@ -238,16 +246,27 @@ public sealed class WheelWindow : Window
             {
                 var a0 = -90 - step / 2 + i * step;
                 var a1 = a0 + step;
+                var fill = new SolidColorBrush(((SolidColorBrush)_c.Sector).Color);
+                var stroke = new SolidColorBrush(((SolidColorBrush)_c.SectorStroke).Color);
+                var text = new SolidColorBrush(((SolidColorBrush)_c.Text).Color);
+                var scale = new ScaleTransform(1, 1);
+                // a full-size layer per sector, so it can grow outward from the wheel center
+                var layer = new Canvas
+                {
+                    Width = Width, Height = Height, IsHitTestVisible = false,
+                    RenderTransformOrigin = new Point(center.X / Width, center.Y / Height), RenderTransform = scale
+                };
                 var path = new Path
                 {
                     Data = n == 1 ? Ring(center, R1, R2) : Sector(center, R1, R2, a0, a1, gap),
-                    Fill = _c.Sector,
-                    Stroke = _c.SectorStroke,
+                    Fill = fill,
+                    Stroke = stroke,
                     StrokeThickness = 1,
                     SnapsToDevicePixels = true
                 };
-                _canvas.Children.Add(path);
-                _sectorPaths.Add(path);
+                layer.Children.Add(path);
+                _canvas.Children.Add(layer);
+                _sectors.Add(new SectorVisual(layer, scale, fill, stroke, text));
 
                 var mid = (a0 + a1) / 2 * Math.PI / 180;
                 var rm = (R1 + R2) / 2;
@@ -259,20 +278,19 @@ public sealed class WheelWindow : Window
                 var glyph = new TextBlock
                 {
                     Text = _items[i].Glyph, FontFamily = Theme.IconFont, FontSize = n > 8 ? 15 : 17,
-                    Foreground = _c.Text, TextAlignment = TextAlignment.Center, Width = labelWidth, IsHitTestVisible = false
+                    Foreground = text, TextAlignment = TextAlignment.Center, Width = labelWidth, IsHitTestVisible = false
                 };
                 var label = new TextBlock
                 {
                     Text = _items[i].Label, FontSize = _items[i].Label.Length > 9 ? fontSize - 1.5 : fontSize,
-                    FontWeight = FontWeights.SemiBold, Foreground = _c.Text,
+                    FontWeight = FontWeights.SemiBold, Foreground = text,
                     TextAlignment = TextAlignment.Center, Width = labelWidth, TextTrimming = TextTrimming.CharacterEllipsis,
                     IsHitTestVisible = false
                 };
                 Canvas.SetLeft(glyph, px - labelWidth / 2); Canvas.SetTop(glyph, py - 20);
                 Canvas.SetLeft(label, px - labelWidth / 2); Canvas.SetTop(label, py + 1);
-                _canvas.Children.Add(glyph);
-                _canvas.Children.Add(label);
-                _sectorTexts.Add((glyph, label));
+                layer.Children.Add(glyph);
+                layer.Children.Add(label);
             }
         }
 
@@ -336,12 +354,22 @@ public sealed class WheelWindow : Window
                 Text = Catalog.ModeTitle(m), FontSize = 12, FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal,
                 Foreground = active ? Brushes.White : _c.Text, VerticalAlignment = VerticalAlignment.Center
             });
+            var idle = new SolidColorBrush(Colors.Transparent);
             var chip = new Border
             {
-                Background = active ? _c.Hover : Brushes.Transparent, CornerRadius = new CornerRadius(11),
+                Background = active ? _c.Hover : idle, CornerRadius = new CornerRadius(11),
                 Padding = new Thickness(10, 4, 10, 4), Child = content, Cursor = _dragMode ? null : Cursors.Hand, Tag = m
             };
-            if (!_dragMode) chip.MouseLeftButtonUp += (s, e) => { e.Handled = true; SwitchMode((WheelMode)((Border)s!).Tag); };
+            if (!_dragMode)
+            {
+                chip.MouseLeftButtonUp += (s, e) => { e.Handled = true; SwitchMode((WheelMode)((Border)s!).Tag); };
+                if (!active)
+                {
+                    var tint = Theme.IsDark ? Color.FromArgb(28, 255, 255, 255) : Color.FromArgb(18, 0, 0, 0);
+                    chip.MouseEnter += (_, _) => Motion.ColorTo(idle, tint, 120);
+                    chip.MouseLeave += (_, _) => Motion.ColorTo(idle, Colors.Transparent, 200);
+                }
+            }
             _pill.Children.Add(chip);
         }
         border.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -383,6 +411,18 @@ public sealed class WheelWindow : Window
     }
 
     void UpdateCenter()
+    {
+        var before = _centerTitle.Text;
+        UpdateCenterContent();
+        // the caption under the thumbnail fades into the new text
+        if (_revealed && before.Length > 0 && before != _centerTitle.Text)
+        {
+            Motion.FromTo(_centerTitle, OpacityProperty, 0.25, 1, 160);
+            if (Motion.Translate(_centerTitle) is { } t) Motion.FromTo(t, TranslateTransform.YProperty, 4, 0, 200);
+        }
+    }
+
+    void UpdateCenterContent()
     {
         var center = Center;
         if (_hover >= 0 && _hover < _items.Count)
@@ -432,22 +472,20 @@ public sealed class WheelWindow : Window
     void SetHover(int idx)
     {
         if (idx == _hover) return;
-        if (_hover >= 0 && _hover < _sectorPaths.Count)
-        {
-            _sectorPaths[_hover].Fill = _c.Sector;
-            _sectorPaths[_hover].Stroke = _c.SectorStroke;
-            _sectorTexts[_hover].glyph.Foreground = _c.Text;
-            _sectorTexts[_hover].label.Foreground = _c.Text;
-        }
+        if (_hover >= 0 && _hover < _sectors.Count) Highlight(_sectors[_hover], false);
         _hover = idx;
-        if (_hover >= 0 && _hover < _sectorPaths.Count)
-        {
-            _sectorPaths[_hover].Fill = _c.Hover;
-            _sectorPaths[_hover].Stroke = _c.Hover;
-            _sectorTexts[_hover].glyph.Foreground = _c.HoverText;
-            _sectorTexts[_hover].label.Foreground = _c.HoverText;
-        }
+        if (_hover >= 0 && _hover < _sectors.Count) Highlight(_sectors[_hover], true);
         UpdateCenter();
+    }
+
+    /// <summary>The hovered sector takes the accent color and moves slightly outward; the old one settles back.</summary>
+    void Highlight(SectorVisual s, bool on)
+    {
+        var ms = on ? 110 : 220;
+        Motion.ColorTo(s.Fill, ((SolidColorBrush)(on ? _c.Hover : _c.Sector)).Color, ms);
+        Motion.ColorTo(s.Stroke, ((SolidColorBrush)(on ? _c.Hover : _c.SectorStroke)).Color, ms);
+        Motion.ColorTo(s.Text, ((SolidColorBrush)(on ? _c.HoverText : _c.Text)).Color, ms);
+        Motion.ScaleTo(s.Scale, on ? 1.045 : 1, on ? 260 : 220, on ? Motion.Spring : Motion.EaseOut);
     }
 
     void SwitchMode(WheelMode mode)
@@ -457,16 +495,37 @@ public sealed class WheelWindow : Window
         _hover = -1;
         Build();
         _canvas.Opacity = _revealed ? 1 : 0;
+        if (_revealed) AnimateSectorsIn(0.75);
     }
 
     void Reveal()
     {
         if (_revealed) return;
         _revealed = true;
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        _canvas.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(110)));
-        _scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.86, 1, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
-        _scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.86, 1, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
+        if (!Motion.Enabled)
+        {
+            // off-screen previews and "animation effects off": appear at once
+            _canvas.BeginAnimation(OpacityProperty, null);
+            _canvas.Opacity = 1;
+            Motion.ScaleTo(_scale, 1, 0);
+            return;
+        }
+        Motion.FromTo(_canvas, OpacityProperty, 0, 1, 140);
+        Motion.ScaleFromTo(_scale, 0.8, 1, 320, Motion.Spring);
+        AnimateSectorsIn(0.55);
+    }
+
+    /// <summary>Sectors grow out of the center one after another, clockwise from the top.</summary>
+    void AnimateSectorsIn(double fromScale)
+    {
+        if (!Motion.Enabled) return;
+        var step = Math.Min(22, 180 / Math.Max(1, _sectors.Count));
+        for (var i = 0; i < _sectors.Count; i++)
+        {
+            var s = _sectors[i];
+            Motion.FromTo(s.Layer, OpacityProperty, 0, 1, 170, Motion.EaseOut, i * step);
+            Motion.ScaleFromTo(s.Scale, fromScale, 1, 340, Motion.Spring, i * step);
+        }
     }
 
     static void Guard(Action a, DragEventArgs e)
@@ -550,7 +609,7 @@ public sealed class WheelWindow : Window
         if (_done || idx < 0 || idx >= _items.Count) return;
         var item = _items[idx];
         var files = _files.ToList();
-        CloseWheel();
+        CloseWheel(idx);
         // run after closing so tool dialogs get the focus
         Dispatcher.BeginInvoke(() =>
         {
@@ -563,11 +622,30 @@ public sealed class WheelWindow : Window
         });
     }
 
-    void CloseWheel()
+    void CloseWheel() => CloseWheel(-1);
+
+    /// <summary>
+    /// Closes the wheel: the chosen sector flashes and the wheel fades out growing slightly, a cancelled wheel
+    /// shrinks away. The window stops taking input at once, so it never catches the next click.
+    /// </summary>
+    void CloseWheel(int chosen)
     {
         if (_done) return;
         _done = true;
         if (Current == this) Current = null;
-        try { Close(); } catch { /* already closed */ }
+        if (!Motion.Enabled || !_revealed || !IsVisible)
+        {
+            try { Close(); } catch { /* already closed */ }
+            return;
+        }
+        IsHitTestVisible = false;
+        AllowDrop = false;
+        Background = Brushes.Transparent; // fully transparent pixels let clicks through the layered window
+        if (chosen >= 0 && chosen < _sectors.Count) Motion.ScaleTo(_sectors[chosen].Scale, 1.1, 120);
+        Motion.ScaleTo(_scale, chosen >= 0 ? 1.05 : 0.88, 170, Motion.EaseInOut);
+        Motion.FromTo(_canvas, OpacityProperty, _canvas.Opacity, 0, 170, Motion.EaseInOut, chosen >= 0 ? 60 : 0, () =>
+        {
+            try { Close(); } catch { /* already closed */ }
+        });
     }
 }

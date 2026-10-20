@@ -27,6 +27,7 @@ public sealed class PdfOrganizeWindow : ToolWindow
     int _anchor = -1;
     PageItem? _dragItem;
     Point _dragStart;
+    bool _fannedIn;
 
     public PdfOrganizeWindow(string file) : base(L.T("Organize pages"), Path.GetFileName(file), 1100, 780)
     {
@@ -121,7 +122,14 @@ public sealed class PdfOrganizeWindow : ToolWindow
                 DragDrop.DoDragDrop(tile, new DataObject("MandarinPage", page), DragDropEffects.Move);
                 _dragItem = null;
             };
+            Motion.HoverLift(tile);
             _panel.Children.Add(tile);
+        }
+        // the first time, the pages fan in one after another
+        if (!_fannedIn && _panel.Children.Count > 0)
+        {
+            _fannedIn = true;
+            Motion.Stagger(_panel, 30, 0, 14, 20);
         }
         var removed = Enumerable.Range(0, _pages.Count == 0 ? 0 : _pages.Max(p => p.Source) + 1).Count(i => _pages.All(p => p.Source != i));
         _status.Text = L.F("Pages: {0}. Selected: {1}. Drag pages to change the order.", _pages.Count, _pages.Count(p => p.Selected));
