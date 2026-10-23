@@ -345,14 +345,14 @@ public sealed class WheelWindow : Window
             if (keySymbol.Length > 0)
                 content.Children.Add(new Border
                 {
-                    Background = active ? Theme.Brush(255, 255, 255, 60) : (Theme.IsDark ? Theme.Brush(255, 255, 255, 20) : Theme.Brush(0, 0, 0, 14)),
+                    Background = active ? new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)) : (Theme.IsDark ? Theme.Brush(255, 255, 255, 20) : Theme.Brush(0, 0, 0, 14)),
                     CornerRadius = new CornerRadius(5), Padding = new Thickness(5, 0, 5, 1), Margin = new Thickness(0, 0, 6, 0),
-                    Child = new TextBlock { Text = keySymbol, FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = active ? Brushes.White : _c.SubText }
+                    Child = new TextBlock { Text = keySymbol, FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = active ? _c.HoverText : _c.SubText }
                 });
             content.Children.Add(new TextBlock
             {
                 Text = Catalog.ModeTitle(m), FontSize = 12, FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal,
-                Foreground = active ? Brushes.White : _c.Text, VerticalAlignment = VerticalAlignment.Center
+                Foreground = active ? _c.HoverText : _c.Text, VerticalAlignment = VerticalAlignment.Center
             });
             var idle = new SolidColorBrush(Colors.Transparent);
             var chip = new Border

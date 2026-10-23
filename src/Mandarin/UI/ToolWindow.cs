@@ -46,7 +46,7 @@ public class ToolWindow : Window
         root.Children.Add(Body);
         Content = root;
 
-        SourceInitialized += (_, _) => Native.ApplyWindowChrome(new WindowInteropHelper(this).Handle, Theme.IsDark);
+        SourceInitialized += (_, _) => ThemeResources.ApplyChrome(this);
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
 
         // header, content and buttons arrive one after another; a form builds up row by row
@@ -66,7 +66,7 @@ public class ToolWindow : Window
         if (primary)
         {
             b.Background = Theme.Brush(Theme.Accent);
-            b.Foreground = Brushes.White;
+            b.Foreground = Theme.OnAccent;
             b.BorderBrush = Theme.Brush(Theme.AccentDark);
             b.IsDefault = true;
         }

@@ -61,6 +61,7 @@ public sealed class CropWindow : ToolWindow
         ResizeMode = ResizeMode.CanResize;
         _surface.Children.Add(_image);
         _surface.Children.Add(_overlay);
+        ScreenUnits.SharpWhenEnlarged(_image);
         var viewbox = new Viewbox { Child = _surface, Stretch = Stretch.Uniform };
 
         var side = new StackPanel { Width = 280, Margin = new Thickness(16, 0, 0, 0) };
@@ -221,6 +222,7 @@ public sealed class BackgroundWindow : ToolWindow
     {
         _files = files;
         ResizeMode = ResizeMode.CanResize;
+        ScreenUnits.SharpWhenEnlarged(_preview);
         var side = new StackPanel { Width = 310, Margin = new Thickness(16, 0, 18, 0) };
         side.Children.Add(Ui.Section(L.T("Background"), 0));
         var color1 = Ui.ColorPicker(_o.Color1, c => { _o.Color1 = c; Render(); }, new[]
@@ -423,6 +425,7 @@ public sealed class RedactImageWindow : ToolWindow
         ResizeMode = ResizeMode.CanResize;
         _surface.Children.Add(_image);
         _surface.Children.Add(_overlay);
+        ScreenUnits.SharpWhenEnlarged(_image);
         var side = new StackPanel { Width = 290, Margin = new Thickness(16, 0, 0, 0) };
         side.Children.Add(Ui.Section(L.T("Find automatically"), 0));
         var find = new StackPanel { Orientation = Orientation.Horizontal };

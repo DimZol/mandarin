@@ -53,7 +53,12 @@ public sealed class AppSettings
 
     // start-with-Windows is opt-in: the registry is never written silently
     public bool StartWithWindows { get; set; }
+    /// <summary>Theme of earlier versions; read once to choose the palette.</summary>
     public AppTheme Theme { get; set; } = AppTheme.System;
+    /// <summary>Interface palette: "windows", "auto" or a palette id (see Theme.Palettes).</summary>
+    public string? Palette { get; set; }
+    public bool AccentOn { get; set; } = true;
+    public string AccentColor { get; set; } = "#F26B1D";
     public AppLanguage Language { get; set; } = AppLanguage.System;
     public bool FirstRunDone { get; set; }
 
@@ -82,6 +87,8 @@ public sealed class AppSettings
         {
             if (File.Exists(FilePath))
                 Current = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Json) ?? new();
+            // settings of 1.1 and earlier: the light and dark themes become the matching palettes
+            Current.Palette ??= Current.Theme switch { AppTheme.Light => "light", AppTheme.Dark => "gray", _ => "windows" };
         }
         catch (Exception ex)
         {

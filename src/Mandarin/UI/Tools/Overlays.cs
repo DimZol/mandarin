@@ -1,10 +1,59 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
 namespace Mandarin.UI.Tools;
+
+/// <summary>
+/// Screen scale of content shown inside a Viewbox. Handles, frames and lines of the overlays are sized in screen units,
+/// so they look the same on a 16×16 icon and on a 6000-pixel photo.
+/// </summary>
+public static class ScreenUnits
+{
+    /// <summary>How many content units one screen DIP covers (1 when the element is not on screen).</summary>
+    public static double Of(Visual v)
+    {
+        try
+        {
+            if (PresentationSource.FromVisual(v)?.RootVisual is not { } root || !v.IsDescendantOf(root)) return 1;
+            var r = v.TransformToAncestor(root).TransformBounds(new Rect(0, 0, 100, 100));
+            return r.Width > 0.001 ? 100 / r.Width : 1;
+        }
+        catch (InvalidOperationException) { return 1; }
+    }
+
+    /// <summary>Calls back whenever the on-screen scale of the element changes (window resize, another image).</summary>
+    public static void Track(FrameworkElement el, Action<double> changed)
+    {
+        double last = 0;
+        el.LayoutUpdated += (_, _) =>
+        {
+            var u = Of(el);
+            if (Math.Abs(u - last) <= last * 0.002) return;
+            last = u;
+            changed(u);
+        };
+    }
+
+    /// <summary>Crisp pixels for a picture shown at least twice its size (pixel art, icons), smooth scaling otherwise.</summary>
+    public static void SharpWhenEnlarged(Image image)
+    {
+        void Update()
+        {
+            if (image.Source is not BitmapSource bmp || bmp.PixelWidth == 0 || image.ActualWidth == 0) return;
+            var zoom = image.ActualWidth / Of(image) / bmp.PixelWidth;
+            var mode = zoom >= 2 ? BitmapScalingMode.NearestNeighbor : BitmapScalingMode.HighQuality;
+            if (RenderOptions.GetBitmapScalingMode(image) != mode) RenderOptions.SetBitmapScalingMode(image, mode);
+        }
+        Track(image, _ => Update());
+        image.SizeChanged += (_, _) => Update();
+        DependencyPropertyDescriptor.FromProperty(Image.SourceProperty, typeof(Image)).AddValueChanged(image, (_, _) => Update());
+    }
+}
 
 /// <summary>Crop frame with handles and shading outside. Coordinates are in content pixels.</summary>
 public sealed class CropOverlay : Canvas
@@ -19,6 +68,7 @@ public sealed class CropOverlay : Canvas
     Drag _drag;
     Point _start;
     Rect _startRect;
+    double _u = 1;
 
     public double ContentWidth { get; private set; }
     public double ContentHeight { get; private set; }
@@ -46,6 +96,7 @@ public sealed class CropOverlay : Canvas
         MouseLeftButtonDown += OnDown;
         MouseMove += OnMove;
         MouseLeftButtonUp += (_, _) => { _drag = Drag.None; ReleaseMouseCapture(); Changed?.Invoke(); };
+        ScreenUnits.Track(this, u => { _u = u; Redraw(); });
     }
 
     public void SetContentSize(double w, double h)
@@ -79,25 +130,30 @@ public sealed class CropOverlay : Canvas
         double w = ContentWidth, h = w / a;
         if (h > ContentHeight) { h = ContentHeight; w = h * a; }
         _rect = Clamp(new Rect(cx - w / 2, cy - h / 2, w, h));
+        if (Zoomed) _rect = Clamp(new Rect(Math.Round(_rect.X), Math.Round(_rect.Y), _rect.Width, _rect.Height));
     }
 
     Rect Clamp(Rect r)
     {
-        var w = Math.Min(Math.Max(r.Width, 4), ContentWidth);
-        var h = Math.Min(Math.Max(r.Height, 4), ContentHeight);
+        var w = Math.Min(Math.Max(r.Width, MinSide), ContentWidth);
+        var h = Math.Min(Math.Max(r.Height, MinSide), ContentHeight);
         var x = Math.Clamp(r.X, 0, ContentWidth - w);
         var y = Math.Clamp(r.Y, 0, ContentHeight - h);
         return new Rect(x, y, w, h);
     }
 
-    double HandleSize => Math.Max(8, Math.Max(ContentWidth, ContentHeight) / 70);
+    // sizes in content units for a given size on screen
+    double HandleSize => 12 * _u;
+    double MinSide => Math.Max(1, 6 * _u);
+    /// <summary>A content pixel takes more than a screen point: the frame snaps to whole pixels.</summary>
+    bool Zoomed => _u < 1;
 
     void Redraw()
     {
         var full = new RectangleGeometry(new Rect(0, 0, ContentWidth, ContentHeight));
         var inner = new RectangleGeometry(_rect);
         _shade.Data = new CombinedGeometry(GeometryCombineMode.Exclude, full, inner);
-        var t = Math.Max(1, Math.Max(ContentWidth, ContentHeight) / 600);
+        var t = _u;
         _frame.StrokeThickness = t * 1.5;
         SetLeft(_frame, _rect.X); SetTop(_frame, _rect.Y);
         _frame.Width = _rect.Width; _frame.Height = _rect.Height;
@@ -132,7 +188,7 @@ public sealed class CropOverlay : Canvas
     {
         var p = e.GetPosition(this);
         var pts = HandlePoints();
-        var tol = HandleSize * 1.4;
+        var tol = HandleSize * 1.2;
         var kinds = new[] { Drag.NW, Drag.N, Drag.NE, Drag.E, Drag.SE, Drag.S, Drag.SW, Drag.W };
         _drag = Drag.None;
         for (var i = 0; i < 8; i++)
@@ -153,6 +209,7 @@ public sealed class CropOverlay : Canvas
         switch (_drag)
         {
             case Drag.Move:
+                if (Zoomed) d = new Vector(Math.Round(d.X), Math.Round(d.Y));
                 _rect = Clamp(new Rect(r.X + d.X, r.Y + d.Y, r.Width, r.Height));
                 Redraw();
                 return;
@@ -168,10 +225,11 @@ public sealed class CropOverlay : Canvas
                 if (name.Contains('E')) rr = r.Right + d.X;
                 break;
         }
+        if (Zoomed) { l = Math.Round(l); rr = Math.Round(rr); t = Math.Round(t); b = Math.Round(b); }
         l = Math.Clamp(l, 0, ContentWidth); rr = Math.Clamp(rr, 0, ContentWidth);
         t = Math.Clamp(t, 0, ContentHeight); b = Math.Clamp(b, 0, ContentHeight);
         var nr = new Rect(new Point(Math.Min(l, rr), Math.Min(t, b)), new Point(Math.Max(l, rr), Math.Max(t, b)));
-        if (Aspect is { } a && nr.Width > 1 && nr.Height > 1)
+        if (Aspect is { } a && nr.Width > 0 && nr.Height > 0)
         {
             // fit the aspect ratio while keeping the opposite corner in place
             var horizontalDrag = _drag is Drag.E or Drag.W;
@@ -184,7 +242,7 @@ public sealed class CropOverlay : Canvas
             nr = new Rect(x, y, w, h);
             if (nr.Right > ContentWidth || nr.Bottom > ContentHeight || nr.X < 0 || nr.Y < 0) return;
         }
-        if (nr.Width < 4 || nr.Height < 4) return;
+        if (nr.Width < MinSide || nr.Height < MinSide) return;
         _rect = nr;
         Redraw();
     }
@@ -206,6 +264,8 @@ public sealed class RegionsOverlay : Canvas
     Point _start;
     bool _moving;
     Point _moveStart;
+    Rect _moveRect;
+    double _u = 1;
     public double ContentWidth { get; private set; }
     public double ContentHeight { get; private set; }
     public event Action? SelectionChanged;
@@ -223,6 +283,11 @@ public sealed class RegionsOverlay : Canvas
         MouseLeftButtonUp += OnUp;
         Focusable = true;
         KeyDown += (_, e) => { if (e.Key == Key.Delete) RemoveSelected(); };
+        ScreenUnits.Track(this, u =>
+        {
+            _u = u;
+            foreach (var r in Regions) r.Shape.StrokeThickness = r == _selected ? Stroke * 2.5 : Stroke;
+        });
     }
 
     public void SetContentSize(double w, double h)
@@ -230,7 +295,13 @@ public sealed class RegionsOverlay : Canvas
         ContentWidth = w; ContentHeight = h; Width = w; Height = h;
     }
 
-    double Stroke => Math.Max(1.5, Math.Max(ContentWidth, ContentHeight) / 500);
+    // line width and the smallest area in content units for a given size on screen
+    double Stroke => 1.5 * _u;
+    double MinSide => Math.Max(1, 4 * _u);
+    /// <summary>A content pixel takes more than a screen point: areas snap to whole pixels.</summary>
+    bool Zoomed => _u < 1;
+
+    Point Snap(Point p) => Zoomed ? new Point(Math.Round(p.X), Math.Round(p.Y)) : p;
 
     public Region? Add(Rect r, double start = 0, double end = double.MaxValue)
     {
@@ -295,12 +366,12 @@ public sealed class RegionsOverlay : Canvas
         if (hit != null)
         {
             Select(hit);
-            _moving = true; _moveStart = p;
+            _moving = true; _moveStart = p; _moveRect = hit.Rect;
             CaptureMouse();
             return;
         }
         Select(null);
-        _start = p;
+        _start = Snap(p);
         var (s, en) = DefaultTime?.Invoke() ?? (0, double.MaxValue);
         _drawing = Add(new Rect(p, new Size(0, 0)), s, en);
         CaptureMouse();
@@ -314,16 +385,16 @@ public sealed class RegionsOverlay : Canvas
         if (_moving && _selected != null)
         {
             var d = p - _moveStart;
-            var r = _selected.Rect;
+            if (Zoomed) d = new Vector(Math.Round(d.X), Math.Round(d.Y));
+            var r = _moveRect;
             r.X = Math.Clamp(r.X + d.X, 0, ContentWidth - r.Width);
             r.Y = Math.Clamp(r.Y + d.Y, 0, ContentHeight - r.Height);
             _selected.Rect = r;
             Place(_selected);
-            _moveStart = p;
         }
         else if (_drawing != null)
         {
-            _drawing.Rect = new Rect(_start, p);
+            _drawing.Rect = new Rect(_start, Snap(p));
             Place(_drawing);
         }
     }
@@ -334,7 +405,7 @@ public sealed class RegionsOverlay : Canvas
         _moving = false;
         if (_drawing != null)
         {
-            if (_drawing.Rect.Width < 4 || _drawing.Rect.Height < 4)
+            if (_drawing.Rect.Width < MinSide || _drawing.Rect.Height < MinSide)
             {
                 Children.Remove(_drawing.Shape);
                 Regions.Remove(_drawing);

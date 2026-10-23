@@ -21,7 +21,7 @@ public sealed class ShelfWindow : Window
     readonly Border _panel;
     Point _dragStart;
     string? _dragCandidate;
-    bool _left, _closeAnimated;
+    bool _left, _closeAnimated, _startLeft, _skipEntrance;
 
     ShelfWindow()
     {
@@ -85,8 +85,8 @@ public sealed class ShelfWindow : Window
         };
         Loaded += (_, _) =>
         {
-            Dock(left: false, animate: false);
-            Motion.Entrance(_panel, 0, 0, 360, 48); // slides in from the right edge
+            Dock(left: _startLeft, animate: false);
+            if (!_skipEntrance) Motion.Entrance(_panel, 0, 0, 360, 48); // slides in from the right edge
         };
         // the shelf slides back out towards its edge before it closes
         Closing += (_, e) =>
@@ -141,6 +141,20 @@ public sealed class ShelfWindow : Window
         }
         _instance.Add(files);
         _instance.Activate();
+    }
+
+    /// <summary>Repaints an open shelf after the palette or the accent changes.</summary>
+    public static void Restyle()
+    {
+        if (_instance is not { IsLoaded: true } old) return;
+        var files = old._files.ToList();
+        var left = old._left;
+        old._closeAnimated = true;
+        old.Close();
+        _instance = new ShelfWindow { _startLeft = left, _skipEntrance = true };
+        _instance.Closed += (_, _) => _instance = null;
+        _instance.Show();
+        _instance.Add(files);
     }
 
     public static void Toggle()

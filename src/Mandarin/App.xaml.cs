@@ -36,7 +36,9 @@ public partial class App : Application
             return;
         }
 
-        ApplyTheme();
+        ApplyThemeTo(this);
+        _lookSignature = LookSignature();
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         Motion.Init();
         DispatcherUnhandledException += OnUnhandled;
         TaskScheduler.UnobservedTaskException += (_, ev) => { Log.Error("Unobserved task", ev.Exception); ev.SetObserved(); };
@@ -79,17 +81,34 @@ public partial class App : Application
         ShelfWindow.RestoreIfNeeded();
     }
 
-    public static void ApplyTheme() => ApplyThemeTo(Current);
+    /// <summary>Applies the palette and the accent from settings and repaints the open windows.</summary>
+    public static void ApplyTheme()
+    {
+        ApplyThemeTo(Current);
+        _lookSignature = LookSignature();
+        foreach (var w in Current.Windows.OfType<ToolWindow>()) ThemeResources.ApplyChrome(w);
+        HomeWindow.Restyle();
+        ShelfWindow.Restyle();
+    }
+
+    static string _lookSignature = "";
+
+    /// <summary>What the look depends on besides the settings: the Windows light/dark mode and accent color.</summary>
+    static string LookSignature() => $"{Theme.SystemIsDark()}|{SystemColors.AccentColor}|{AppSettings.Current.Palette}|{AppSettings.Current.AccentOn}|{AppSettings.Current.AccentColor}";
+
+    /// <summary>The Windows theme or accent changed: the Windows and Auto palettes follow it.</summary>
+    void OnUserPreferenceChanged(object? sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category is not (Microsoft.Win32.UserPreferenceCategory.General or Microsoft.Win32.UserPreferenceCategory.Color or Microsoft.Win32.UserPreferenceCategory.VisualStyle)) return;
+        // the Fluent theme switches its own colors first; repaint after it
+        Dispatcher.BeginInvoke(() => { if (LookSignature() != _lookSignature) ApplyTheme(); }, DispatcherPriority.Background);
+    }
 
     public static void ApplyThemeTo(Application app)
     {
-        app.ThemeMode = AppSettings.Current.Theme switch
-        {
-            AppTheme.Light => ThemeMode.Light,
-            AppTheme.Dark => ThemeMode.Dark,
-            _ => ThemeMode.System
-        };
-        Accent.Apply(app);
+        // the Windows palette follows the system; the others choose the light or dark Fluent base they repaint
+        app.ThemeMode = Theme.Current is { } p ? p.Dark ? ThemeMode.Dark : ThemeMode.Light : ThemeMode.System;
+        ThemeResources.Apply(app);
     }
 
     void HandleArgs(string[] args)
@@ -149,6 +168,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _gesture?.Dispose();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         HtmlEngine.Shutdown();

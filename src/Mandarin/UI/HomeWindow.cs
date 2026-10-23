@@ -21,9 +21,10 @@ namespace Mandarin.UI;
 public sealed class HomeWindow : Window
 {
     static HomeWindow? _instance;
-    readonly ContentControl _page = new();
-    readonly ListBox _nav = new();
+    ContentControl _page = new();
+    ListBox _nav = new();
     readonly Dictionary<string, Func<UIElement>> _pages;
+    bool _restyling;
 
     HomeWindow()
     {
@@ -43,6 +44,17 @@ public sealed class HomeWindow : Window
             ["about"] = AboutPage
         };
 
+        Build();
+        SourceInitialized += (_, _) => ThemeResources.ApplyChrome(this);
+        Closed += (_, _) => _instance = null;
+        _nav.SelectedIndex = 0;
+    }
+
+    /// <summary>Navigation and page host; built again when the palette or the accent changes.</summary>
+    void Build()
+    {
+        _nav = new ListBox();
+        _page = new ContentControl();
         var logo = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 18, 16, 18) };
         logo.Children.Add(new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Mandarin;component/Assets/Mandarin.png")), Width = 30, Height = 30 });
         logo.Children.Add(new TextBlock { Text = "Mandarin", FontSize = 18, FontWeight = FontWeights.SemiBold, FontFamily = Theme.DisplayFont, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
@@ -92,10 +104,21 @@ public sealed class HomeWindow : Window
         grid.Children.Add(side);
         grid.Children.Add(pageHost);
         Content = grid;
+    }
 
-        SourceInitialized += (_, _) => Native.ApplyWindowChrome(new WindowInteropHelper(this).Handle, Theme.IsDark);
-        Closed += (_, _) => _instance = null;
-        _nav.SelectedIndex = 0;
+    /// <summary>Repaints the open main window with the new palette, keeping the page and its scroll position.</summary>
+    public static void Restyle()
+    {
+        if (_instance is not { } w) return;
+        var key = (w._nav.SelectedItem as ListBoxItem)?.Tag as string ?? "home";
+        var offset = (w._page.Content as ScrollViewer)?.VerticalOffset ?? 0;
+        w._restyling = true;
+        w.Build();
+        w.Select(key);
+        w._restyling = false;
+        ThemeResources.ApplyChrome(w);
+        if (w._page.Content is ScrollViewer sv)
+            w.Dispatcher.BeginInvoke(() => sv.ScrollToVerticalOffset(offset), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     /// <summary>Window for previews/screenshots that is not registered as the main one.</summary>
@@ -132,7 +155,7 @@ public sealed class HomeWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
         // the first page comes in with the window itself; later pages build up block by block
-        if (IsLoaded && page is Panel panel) Motion.Stagger(panel, 26, 0, 14);
+        if (IsLoaded && !_restyling && page is Panel panel) Motion.Stagger(panel, 26, 0, 14);
     }
 
     public static void PickFilesAndShowWheel()
@@ -393,6 +416,11 @@ public sealed class HomeWindow : Window
 
         void Save() => AppSettings.Save();
 
+        // --- appearance
+        stack.Children.Add(H2(L.T("Appearance")));
+        stack.Children.Add(AccentPicker());
+        stack.Children.Add(PalettePicker());
+
         // --- gesture
         stack.Children.Add(H2(L.T("Wheel")));
         var enabled = new CheckBox { Content = L.T("Show the wheel while dragging files"), IsChecked = s.DragWheelEnabled };
@@ -517,7 +545,6 @@ public sealed class HomeWindow : Window
         stack.Children.Add(H2(L.T("Windows integration")));
         stack.Children.Add(Check(L.T("Start with Windows (in the tray)"), s.StartWithWindows, v => { s.StartWithWindows = v; Integration.SetAutostart(v); }));
         stack.Children.Add(Check(L.T("\"Send to → Mandarin\" entry in the Explorer menu"), Integration.SendToInstalled, v => Integration.SetSendTo(v)));
-        stack.Children.Add(Ui.Field(L.T("Theme"), Ui.Segmented(new[] { L.T("System"), L.T("Light"), L.T("Dark") }, (int)s.Theme, i => { s.Theme = (AppTheme)i; Save(); App.ApplyTheme(); }), 200));
         var languageNote = new TextBlock { Opacity = 0.75, FontSize = 12, Margin = new Thickness(0, 4, 0, 0) };
         stack.Children.Add(Ui.Field(L.T("Language"), Ui.Segmented(new[] { L.T("System"), L.NativeName("en"), L.NativeName("ru") }, (int)s.Language, i =>
         {
@@ -538,6 +565,203 @@ public sealed class HomeWindow : Window
             return c;
         }
     }
+
+    // ---------------- Appearance ----------------
+
+    static void ApplyLook()
+    {
+        AppSettings.Save();
+        App.ApplyTheme();
+    }
+
+    static UIElement AccentPicker()
+    {
+        var s = AppSettings.Current;
+        var panel = new StackPanel();
+        var on = new CheckBox { Content = L.T("Accent color in the interface"), IsChecked = s.AccentOn };
+        on.Checked += (_, _) => { s.AccentOn = true; ApplyLook(); };
+        on.Unchecked += (_, _) => { s.AccentOn = false; ApplyLook(); };
+        panel.Children.Add(on);
+
+        var row = new WrapPanel { Margin = new Thickness(0, 10, 0, 0), Opacity = s.AccentOn ? 1 : 0.55 };
+        Theme.TryParseHex(s.AccentColor, out var current);
+        var ring = Theme.IsDark ? Theme.Brush(0xFF, 0xFF, 0xFF) : Theme.Brush(0, 0, 0);
+        foreach (var (hex, name) in Theme.Accents)
+        {
+            Theme.TryParseHex(hex, out var c);
+            var chosen = s.AccentOn && c == current;
+            var sw = new Border
+            {
+                Width = 30, Height = 30, CornerRadius = new CornerRadius(15), Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand,
+                Background = Theme.Brush(c), BorderBrush = chosen ? ring : Theme.Brush(0x80, 0x80, 0x80, 0x60), BorderThickness = new Thickness(chosen ? 2 : 1),
+                ToolTip = $"{L.T(name)} · {hex}",
+                Child = chosen ? new TextBlock
+                {
+                    Text = "", FontFamily = Theme.IconFont, FontSize = 13, Foreground = Theme.Brush(Theme.TextOn(c)),
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+                } : null
+            };
+            sw.MouseLeftButtonUp += (_, _) => { s.AccentColor = hex; s.AccentOn = true; ApplyLook(); };
+            sw.MouseEnter += (_, _) => { if (Motion.Scale(sw) is { } st) Motion.ScaleTo(st, 1.12, 180, Motion.Spring); };
+            sw.MouseLeave += (_, _) => { if (Motion.Scale(sw) is { } st) Motion.ScaleTo(st, 1, 200); };
+            row.Children.Add(sw);
+        }
+        var isCustom = !Theme.Accents.Any(a => string.Equals(a.hex, s.AccentColor, StringComparison.OrdinalIgnoreCase));
+        var custom = new Button
+        {
+            Content = isCustom ? L.F("Custom: {0}", s.AccentColor.ToUpperInvariant()) : L.T("Custom color…"),
+            Padding = new Thickness(12, 4, 12, 5), Margin = new Thickness(4, 0, 0, 8), VerticalAlignment = VerticalAlignment.Top
+        };
+        if (isCustom && s.AccentOn)
+            custom.Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children =
+                {
+                    new Border { Width = 14, Height = 14, CornerRadius = new CornerRadius(7), Background = Theme.Brush(current), Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock { Text = L.F("Custom: {0}", s.AccentColor.ToUpperInvariant()) }
+                }
+            };
+        custom.Click += (_, _) =>
+        {
+            using var dlg = new System.Windows.Forms.ColorDialog { FullOpen = true, Color = System.Drawing.Color.FromArgb(current.R, current.G, current.B) };
+            if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            s.AccentColor = Theme.Hex(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
+            s.AccentOn = true;
+            ApplyLook();
+        };
+        row.Children.Add(custom);
+        panel.Children.Add(row);
+        panel.Children.Add(Ui.Note(L.T("The accent highlights main buttons, check boxes, sliders, selected items and the wheel option under the cursor. With the accent off the palette's own neutral colors remain.")));
+        return panel;
+    }
+
+    static UIElement PalettePicker()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+        panel.Children.Add(Ui.Section(L.T("Interface palette")));
+        foreach (var (title, ids) in Theme.Groups)
+        {
+            panel.Children.Add(new TextBlock { Text = L.T(title), Opacity = 0.7, FontSize = 12, Margin = new Thickness(0, 6, 0, 6) });
+            var wrap = new WrapPanel();
+            foreach (var id in ids) wrap.Children.Add(PaletteTile(id));
+            panel.Children.Add(wrap);
+        }
+        panel.Children.Add(Ui.Note(L.T("The palette applies at once and is saved. \"Windows\" keeps the system look with Mica, \"Auto\" follows the Windows theme and switches with it. Images and conversion results are not affected.")));
+        return panel;
+    }
+
+    /// <summary>Colors of a palette miniature.</summary>
+    sealed record Look(Color Bg, Color Side, Color Panel, Color Line, Color Text, Color Muted, Color Accent);
+
+    static Look LookOf(Theme.Palette p)
+    {
+        var accent = Theme.ChosenAccent is { } a ? p.Dark ? a : Theme.Mix(a, Colors.Black, 0.12) : p.Accent;
+        return new Look(p.Bg, p.Bg2, p.Panel, p.Line, p.Text, p.Muted, accent);
+    }
+
+    static Look WindowsLook(bool dark)
+    {
+        var accent = Theme.ChosenAccent ?? SystemColors.AccentColor;
+        return dark
+            ? new Look(Color.FromRgb(0x20, 0x20, 0x20), Color.FromRgb(0x1C, 0x1C, 0x1C), Color.FromRgb(0x2B, 0x2B, 0x2B), Color.FromRgb(0x3A, 0x3A, 0x3A), Colors.White, Color.FromRgb(0x9D, 0x9D, 0x9D), accent)
+            : new Look(Color.FromRgb(0xF3, 0xF3, 0xF3), Color.FromRgb(0xEB, 0xEB, 0xEB), Colors.White, Color.FromRgb(0xE0, 0xE0, 0xE0), Color.FromRgb(0x1A, 0x1A, 0x1A), Color.FromRgb(0x61, 0x61, 0x61), accent);
+    }
+
+    const double PreviewW = 160, PreviewH = 92;
+
+    /// <summary>A miniature window in the palette colors: a sidebar, a card with a progress bar and two buttons.</summary>
+    static FrameworkElement Miniature(Look l)
+    {
+        static Brush B(Color c) => Theme.Brush(c);
+        var side = new StackPanel { Background = B(l.Side), Width = 34 };
+        for (var i = 0; i < 3; i++)
+            side.Children.Add(new Border
+            {
+                Height = 5, Width = 18, CornerRadius = new CornerRadius(2.5), Margin = new Thickness(0, i == 0 ? 12 : 6, 0, 0),
+                Background = B(i == 0 ? l.Accent : l.Muted), Opacity = i == 0 ? 1 : 0.45
+            });
+        var bar = new Grid { Height = 4, Margin = new Thickness(0, 6, 0, 0) };
+        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
+        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+        var track = new Border { Background = B(l.Line), CornerRadius = new CornerRadius(2) };
+        Grid.SetColumnSpan(track, 2);
+        bar.Children.Add(track);
+        bar.Children.Add(new Border { Background = B(l.Accent), CornerRadius = new CornerRadius(2) });
+        var card = new Border
+        {
+            Background = B(l.Panel), BorderBrush = B(l.Line), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Padding = new Thickness(7, 5, 7, 7),
+            Child = new StackPanel
+            {
+                Children =
+                {
+                    new TextBlock { Text = "Aa", FontWeight = FontWeights.SemiBold, FontSize = 11, Foreground = B(l.Text) },
+                    new Border { Height = 3, Width = 52, HorizontalAlignment = HorizontalAlignment.Left, Background = B(l.Muted), Opacity = 0.7, CornerRadius = new CornerRadius(1.5), Margin = new Thickness(0, 3, 0, 0) },
+                    bar
+                }
+            }
+        };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 7, 0, 0) };
+        buttons.Children.Add(new Border { Width = 30, Height = 12, CornerRadius = new CornerRadius(3), Background = B(l.Line), Margin = new Thickness(0, 0, 5, 0) });
+        buttons.Children.Add(new Border { Width = 36, Height = 12, CornerRadius = new CornerRadius(3), Background = B(l.Accent) });
+        var main = new StackPanel { Margin = new Thickness(9, 9, 9, 0), Children = { card, buttons } };
+        var grid = new Grid { Width = PreviewW, Height = PreviewH, Background = B(l.Bg) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        Grid.SetColumn(main, 1);
+        grid.Children.Add(side);
+        grid.Children.Add(main);
+        return grid;
+    }
+
+    /// <summary>Two palettes in one miniature: the left half dark, the right half light.</summary>
+    static FrameworkElement Split(Look dark, Look light)
+    {
+        var right = Miniature(light);
+        right.Clip = new RectangleGeometry(new Rect(PreviewW / 2, 0, PreviewW / 2, PreviewH));
+        return new Grid { Children = { Miniature(dark), right } };
+    }
+
+    static Border PaletteTile(string id)
+    {
+        var chosen = Theme.ChosenId == id;
+        var p = Theme.Find(id);
+        var (name, note) = id switch
+        {
+            Theme.WindowsId => ("Windows", L.T("system colors and Mica, by default")),
+            Theme.AutoId => (L.T("Auto"), L.T("as in the system: dark - Gray, light - Light gray")),
+            _ => (L.T(p!.Name), L.T(p.Note))
+        };
+        var preview = id switch
+        {
+            Theme.WindowsId => Miniature(WindowsLook(Theme.SystemIsDark())),
+            Theme.AutoId => Split(LookOf(Theme.Find("gray")!), LookOf(Theme.Find("light")!)),
+            _ => Miniature(LookOf(p!))
+        };
+        var caption = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 8, 0, 0) };
+        caption.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.SemiBold });
+        if (chosen) caption.Children.Add(new TextBlock { Text = "", FontFamily = Theme.IconFont, FontSize = 12, Margin = new Thickness(6, 2, 0, 0), Foreground = Theme.Brush(Theme.Accent) });
+        var content = new StackPanel { Width = PreviewW };
+        content.Children.Add(new Border { CornerRadius = new CornerRadius(6), ClipToBounds = true, Child = preview, BorderBrush = Theme.Brush(0x80, 0x80, 0x80, 0x50), BorderThickness = new Thickness(1) });
+        content.Children.Add(caption);
+        content.Children.Add(new TextBlock { Text = note, FontSize = 11.5, Opacity = 0.65, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 1, 0, 0) });
+        var tile = new Border
+        {
+            Child = content, Padding = new Thickness(8), Margin = new Thickness(0, 0, 10, 10), CornerRadius = new CornerRadius(10), Cursor = Cursors.Hand,
+            Background = Theme.IsDark ? Theme.Brush(255, 255, 255, 8) : Theme.Brush(255, 255, 255, 170),
+            BorderBrush = chosen ? Theme.Brush(Theme.Accent) : Theme.IsDark ? Theme.Brush(255, 255, 255, 16) : Theme.Brush(0, 0, 0, 16),
+            BorderThickness = new Thickness(chosen ? 2 : 1), ToolTip = chosen ? null : L.F("Choose the \"{0}\" palette", name)
+        };
+        tile.MouseLeftButtonUp += (_, _) =>
+        {
+            if (Theme.ChosenId == id) return;
+            AppSettings.Current.Palette = id;
+            ApplyLook();
+        };
+        Motion.HoverLift(tile, 2);
+        return tile;
+    }
+
 
     // ---------------- About ----------------
 

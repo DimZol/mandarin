@@ -96,7 +96,7 @@ public sealed class Hud : Window
         else icon.Children.Add(new Border
         {
             CornerRadius = new CornerRadius(10), Background = Theme.Brush(Theme.Accent),
-            Child = new TextBlock { Text = job.Glyph, FontFamily = Theme.IconFont, FontSize = 20, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+            Child = new TextBlock { Text = job.Glyph, FontFamily = Theme.IconFont, FontSize = 20, Foreground = Theme.OnAccent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         });
 
         var title = new TextBlock { Text = job.Title, FontWeight = FontWeights.SemiBold, FontSize = 13.5, Foreground = fg, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -202,7 +202,7 @@ public sealed class Hud : Window
             Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = Theme.Brush(color),
             BorderBrush = Theme.IsDark ? Theme.Brush(0x2B, 0x2B, 0x2B) : Brushes.White, BorderThickness = new Thickness(2),
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, -5, -5),
-            Child = new TextBlock { Text = glyph, FontFamily = Theme.IconFont, FontSize = 8, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+            Child = new TextBlock { Text = glyph, FontFamily = Theme.IconFont, FontSize = 8, Foreground = color == Theme.Accent ? Theme.OnAccent : Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         };
         icon.Children.Add(badge);
         Motion.Pop(badge, 0.2, 0, 420);
@@ -216,7 +216,7 @@ public sealed class Hud : Window
             Content = text, Padding = new Thickness(12, 4, 12, 5), Margin = new Thickness(0, 0, 8, 0), FontSize = 12,
             Cursor = Cursors.Hand, MinHeight = 0
         };
-        if (accent) { b.Background = Theme.Brush(Theme.Accent); b.Foreground = Brushes.White; b.BorderBrush = Theme.Brush(Theme.AccentDark); }
+        if (accent) { b.Background = Theme.Brush(Theme.Accent); b.Foreground = Theme.OnAccent; b.BorderBrush = Theme.Brush(Theme.AccentDark); }
         b.Click += (_, _) => onClick();
         return b;
     }

@@ -51,7 +51,7 @@ public static class Program
                     var d = await WinRt.OpenPdfAsync(pdfPath);
                     await WinRt.RenderPageAsync(d, 0, 72);
                 }
-                else if (filter == "ui") { Mandarin.App.ApplyThemeTo(app); await UiShots.RunAsync(root); }
+                else if (filter is "ui" or "ui-palettes") { Mandarin.App.ApplyThemeTo(app); await UiShots.RunAsync(root, filter == "ui-palettes"); }
                 else if (filter == "gesture")
                 {
                     AppSettings.Load();

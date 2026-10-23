@@ -62,13 +62,14 @@ public sealed class AnnotateWindow : ToolWindow
         bar.Children.Add(new Border { Width = 16 });
         bar.Children.Add(Ui.ColorPicker(_color, c => { _color = c; Recolor(); }));
         bar.Children.Add(new Border { Width = 16 });
-        var (thick, thickSlider) = Ui.LabeledSlider(L.T("Thickness"), 1, 20, 4, "0", v => _thickness = v * Scale);
+        var (thick, thickSlider) = Ui.LabeledSlider(L.T("Thickness"), 1, 20, 4, "0", v => _thickness = StrokeFor(v));
         thick.Width = 300;
         bar.Children.Add(thick);
         bar.Children.Add(Ui.IconButton("", L.T("Undo (Ctrl+Z)"), Undo));
 
         _surface.Children.Add(_image);
         _surface.Children.Add(_canvas);
+        ScreenUnits.SharpWhenEnlarged(_image);
         _viewbox.Child = _surface;
         var host = new Border
         {
@@ -105,7 +106,7 @@ public sealed class AnnotateWindow : ToolWindow
                 bmp.Freeze();
                 _image.Source = bmp;
                 _surface.Width = w; _surface.Height = h;
-                _thickness = thickSlider.Value * Scale;
+                _thickness = StrokeFor(thickSlider.Value);
             }
             catch (Exception ex)
             {
@@ -115,8 +116,21 @@ public sealed class AnnotateWindow : ToolWindow
         };
     }
 
-    /// <summary>Screen pixel → image pixel scale, so stroke width does not depend on the resolution.</summary>
-    double Scale => Math.Max(1, Math.Max(_w, _h) / 1000.0);
+    /// <summary>
+    /// Size of the drawing relative to the image, so strokes, arrowheads, text and callouts look alike at any resolution:
+    /// 1 from 500 to 1000 pixels, more on large photos, down to 1/4 on small pictures and icons.
+    /// </summary>
+    double Scale
+    {
+        get
+        {
+            var n = Math.Max(_w, _h);
+            return n >= 500 ? Math.Max(1, n / 1000.0) : Math.Max(0.25, n / 500.0);
+        }
+    }
+
+    /// <summary>Stroke width in image pixels for the slider value - never thinner than one pixel.</summary>
+    double StrokeFor(double v) => Math.Max(1, v * Scale);
 
     Brush Stroke => new SolidColorBrush(_color);
 
@@ -196,7 +210,7 @@ public sealed class AnnotateWindow : ToolWindow
         switch (_drawing)
         {
             case Path path:
-                path.Data = _tool == Tool.Arrow ? ArrowGeometry(_start, p, _thickness) : new LineGeometry(_start, p);
+                path.Data = _tool == Tool.Arrow ? ArrowGeometry(_start, p, _thickness, Scale) : new LineGeometry(_start, p);
                 break;
             case Rectangle or Ellipse:
                 var x = Math.Min(_start.X, p.X); var y = Math.Min(_start.Y, p.Y);
@@ -211,14 +225,14 @@ public sealed class AnnotateWindow : ToolWindow
         }
     }
 
-    static Geometry ArrowGeometry(Point a, Point b, double t)
+    static Geometry ArrowGeometry(Point a, Point b, double t, double scale)
     {
         var v = b - a;
         var len = v.Length;
         if (len < 1) return new LineGeometry(a, b);
         v /= len;
         var n = new Vector(-v.Y, v.X);
-        var head = Math.Min(len * 0.45, t * 4.5 + 10);
+        var head = Math.Min(len * 0.45, t * 4.5 + 10 * scale);
         var baseP = b - v * head;
         var g = new GeometryGroup();
         g.Children.Add(new LineGeometry(a, baseP + v * t));
@@ -237,9 +251,13 @@ public sealed class AnnotateWindow : ToolWindow
     {
         var box = new TextBox
         {
-            FontSize = Math.Max(14, _thickness * 5), Foreground = Stroke, Background = Brushes.Transparent, BorderThickness = new Thickness(1),
-            MinWidth = 80 * Scale, AcceptsReturn = true, FontWeight = FontWeights.SemiBold
+            FontSize = Math.Max(14 * Scale, _thickness * 5), Foreground = Stroke, Background = Brushes.Transparent, AcceptsReturn = true,
+            FontWeight = FontWeights.SemiBold, Padding = new Thickness(0)
         };
+        // the editing box is an on-screen control: its frame and width do not depend on the image size
+        var u = ScreenUnits.Of(_canvas);
+        box.BorderThickness = new Thickness(u);
+        box.MinWidth = 80 * u;
         Canvas.SetLeft(box, p.X); Canvas.SetTop(box, p.Y);
         _canvas.Children.Add(box);
         box.Loaded += (_, _) => box.Focus();
@@ -251,9 +269,9 @@ public sealed class AnnotateWindow : ToolWindow
             {
                 Text = box.Text, FontSize = box.FontSize, Foreground = box.Foreground, FontWeight = FontWeights.SemiBold,
                 RenderTransform = new TranslateTransform(),
-                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 4, ShadowDepth = 1, Opacity = 0.45, Color = Colors.Black }
+                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 4 * Scale, ShadowDepth = Scale, Opacity = 0.45, Color = Colors.Black }
             };
-            Canvas.SetLeft(tb, p.X + 3); Canvas.SetTop(tb, p.Y + 2);
+            Canvas.SetLeft(tb, p.X + 3 * Scale); Canvas.SetTop(tb, p.Y + 2 * Scale);
             _canvas.Children.Add(tb);
             _undo.Push(tb);
         };
@@ -261,9 +279,9 @@ public sealed class AnnotateWindow : ToolWindow
 
     void AddNumber(Point p)
     {
-        var d = Math.Max(26, _thickness * 7);
+        var d = Math.Max(26 * Scale, _thickness * 7);
         var grid = new Grid { Width = d, Height = d, RenderTransform = new TranslateTransform() };
-        grid.Children.Add(new Ellipse { Fill = Stroke, Stroke = Brushes.White, StrokeThickness = Math.Max(2, d / 14) });
+        grid.Children.Add(new Ellipse { Fill = Stroke, Stroke = Brushes.White, StrokeThickness = Math.Max(Math.Min(2, d / 10), d / 14) });
         grid.Children.Add(new TextBlock
         {
             Text = _nextNumber++.ToString(), Foreground = IsLight(_color) ? Brushes.Black : Brushes.White, FontWeight = FontWeights.Bold,

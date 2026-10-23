@@ -72,7 +72,9 @@ internal static class Native
 
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWA_SYSTEMBACKDROP_TYPE = 38;
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWA_SYSTEMBACKDROP_TYPE = 38,
+        DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36;
+    const int DWMWA_COLOR_DEFAULT = unchecked((int)0xFFFFFFFF);
 
     [DllImport("gdi32.dll")]
     public static extern bool DeleteObject(IntPtr hObject);
@@ -108,16 +110,23 @@ internal static class Native
         SetWindowLong(hwnd, GWL_EXSTYLE, ex);
     }
 
-    public static void ApplyWindowChrome(IntPtr hwnd, bool dark, bool mica = true)
+    /// <summary>
+    /// Dark or light title bar and rounded corners. With <paramref name="caption"/> (0xRRGGBB) the title bar takes that color and
+    /// the window gets no Mica (interface palettes); without it Mica and the system title bar colors are used.
+    /// </summary>
+    public static void ApplyWindowChrome(IntPtr hwnd, bool dark, bool mica = true, (uint back, uint text)? caption = null)
     {
         var d = dark ? 1 : 0;
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref d, sizeof(int));
         var round = 2; // DWMWCP_ROUND
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
-        if (mica)
-        {
-            var backdrop = 2; // Mica
-            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
-        }
+        var backdrop = mica && caption == null ? 2 : 1; // Mica : none
+        DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+        // COLORREF is 0x00BBGGRR
+        static int Ref(uint rgb) => (int)(((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF));
+        var back = caption is { } c ? Ref(c.back) : DWMWA_COLOR_DEFAULT;
+        var text = caption is { } c2 ? Ref(c2.text) : DWMWA_COLOR_DEFAULT;
+        DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref back, sizeof(int));
+        DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref text, sizeof(int));
     }
 }

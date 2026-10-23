@@ -148,6 +148,7 @@ public sealed class PhotoEditorWindow : ToolWindow
         _file = file;
         ResizeMode = ResizeMode.CanResize;
         WindowState = WindowState.Normal;
+        ScreenUnits.SharpWhenEnlarged(_preview);
 
         var controls = new StackPanel { Width = 340, Margin = new Thickness(16, 0, 18, 0) };
         void S(string label, double min, double max, double val, string fmt, Action<double> set, double tick = 0)
