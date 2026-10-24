@@ -491,10 +491,8 @@ public sealed class RedactImageWindow : ToolWindow
         _status.Text = L.T("Looking for text…");
         try
         {
-            using var ms = new MemoryStream();
-            _bmp.Save(ms);
             var found = 0;
-            foreach (var line in await WinRt.RecognizeAsync(ms.ToArray()))
+            foreach (var line in await WinRt.RecognizeAsync(Look.Png(_bmp)))
             {
                 var pad = line.H * 0.15;
                 if (ClipToImage(new Rect(line.X - pad, line.Y - pad, line.W + pad * 2, line.H + pad * 2)) is { } r) { _overlay.Add(r); found++; }

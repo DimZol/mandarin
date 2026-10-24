@@ -37,7 +37,7 @@ public sealed class Hud : Window
         Width = 380;
         SizeToContent = SizeToContent.Height;
         FontFamily = Look.UiFont;
-        RenderOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
+        Look.GrayscaleText(this);
         Content = new Border { Padding = new Thickness(14), Child = _stack };
         SizeChanged += (_, _) => Reposition();
     }

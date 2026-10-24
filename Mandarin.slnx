@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Mandarin/Mandarin.csproj" />
+    <Project Path="src/Mandarin.Cross/Mandarin.Cross.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Mandarin.SelfTest/Mandarin.SelfTest.csproj" />

@@ -89,6 +89,7 @@ public static class X11
         public event Action? ButtonReleased;
         public event Action? Escape;
         public volatile bool Enabled = true;
+        static readonly bool Debug = Environment.GetEnvironmentVariable("MANDARIN_X11_DEBUG") == "1";
 
         public bool Install()
         {
@@ -113,6 +114,7 @@ public static class X11
                     XISelectEvents(d, XDefaultRootWindow(d), ref mask, 1);
                     XFlush(d);
                     ok = true;
+                    Log.Info($"X11 gesture: XInput2 {major}.{minor}, opcode {opcode}");
                     ready.Set();
                     Loop(d, opcode);
                     Marshal.FreeHGlobal(maskPtr);
@@ -149,6 +151,7 @@ public static class X11
                     {
                         cookie = Marshal.PtrToStructure<XGenericEventCookie>(ev);
                         var raw = Marshal.PtrToStructure<XIRawEvent>(cookie.data);
+                        if (Debug) Log.Info($"X11 raw event {cookie.evtype} detail {raw.detail}");
                         switch (cookie.evtype)
                         {
                             case XI_RawButtonPress when raw.detail == 1:
@@ -156,16 +159,18 @@ public static class X11
                                 if (Pointer(d) is { } p0) (downX, downY) = (p0.x, p0.y);
                                 break;
                             case XI_RawMotion when down && !dragging:
-                                if (Pointer(d) is { } p1 && (Math.Abs(p1.x - downX) > 8 || Math.Abs(p1.y - downY) > 8)) dragging = true;
+                                dragging = Moved(d, downX, downY);
                                 break;
                             case XI_RawButtonRelease when raw.detail == 1:
-                                var was = dragging;
+                                var was = dragging || Moved(d, downX, downY);
                                 down = dragging = false;
                                 if (was) UiThread.Post(() => ButtonReleased?.Invoke());
                                 break;
                             case XI_RawKeyPress:
                                 var vk = VirtualKey(XkbKeycodeToKeysym(d, (byte)raw.detail, 0, 0));
                                 if (vk == 0 || !pressed.Add(vk)) break; // auto-repeat is not a new tap
+                                // some input sources send no raw motion: check where the pointer is now
+                                if (down && !dragging) dragging = Moved(d, downX, downY);
                                 if (Enabled && down && dragging && Environment.TickCount64 - downTime > 120)
                                 {
                                     if (vk == 0x1B) UiThread.Post(() => Escape?.Invoke());
@@ -182,6 +187,8 @@ public static class X11
             }
             finally { Marshal.FreeHGlobal(ev); }
         }
+
+        static bool Moved(IntPtr d, int x0, int y0) => Pointer(d) is { } p && (Math.Abs(p.x - x0) > 8 || Math.Abs(p.y - y0) > 8);
 
         static (int x, int y)? Pointer(IntPtr d) =>
             XQueryPointer(d, XDefaultRootWindow(d), out _, out _, out var x, out var y, out _, out _, out _) ? (x, y) : null;

@@ -175,6 +175,26 @@ public static class Look
 
     public static readonly FontFamily UiFont = new("fonts:Inter#Inter, $Default");
 
+    /// <summary>Grayscale text antialiasing: subpixel text needs an opaque background (transparent windows, render targets).</summary>
+    public static void GrayscaleText(Visual v)
+    {
+#if AVALONIA12
+        TextOptions.SetTextRenderingMode(v, TextRenderingMode.Antialias);
+#else
+        RenderOptions.SetTextRenderingMode(v, TextRenderingMode.Antialias);
+#endif
+    }
+
+    /// <summary>PNG bytes of a bitmap.</summary>
+    public static byte[] Png(Avalonia.Media.Imaging.Bitmap bmp)
+    {
+        using var ms = new MemoryStream();
+#pragma warning disable CS0618 // the newer overload exists only in Avalonia 12
+        bmp.Save(ms);
+#pragma warning restore CS0618
+        return ms.ToArray();
+    }
+
     // ---------------- applying to Avalonia ----------------
 
     public static event Action? Changed;

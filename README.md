@@ -9,7 +9,7 @@
 <h1 align="center">Mandarin</h1>
 
 <p align="center">
-  The zero-click offline file converter for Windows 11.<br>
+  The zero-click offline file converter for Windows 11 – also for Linux and Windows 7.<br>
   Start dragging a file, tap a key, drop it on a format. Done.
 </p>
 
@@ -40,6 +40,18 @@ Keys can be changed in settings. Release the file in the center of the wheel (or
 The interface is animated throughout: the wheel unfolds sector by sector, the option under the cursor lights up
 and moves outward, progress cards slide in and fold away, and pages, cards and buttons respond to the mouse.
 Turning off *Animation effects* in Windows settings turns the animations off in Mandarin too.
+
+### Appearance
+
+**Settings → Appearance** has the interface palettes of LaserPrep – *Windows* (the system colors with Mica, the
+default), *Auto* (follows the Windows light or dark mode), *Gray*, *Graphite*, *Light gray*, *Steel*, *Teal*,
+*Lilac*, *Amber*, *Coffee* and *Burgundy* – and the accent color: Mandarin's tangerine, ten more presets or any
+custom color. The accent can also be turned off to keep the palette's own neutral colors. Everything is repainted at
+once: the windows, the wheel, the progress cards and the title bars.
+
+<p align="center">
+  <img src="docs/screenshots/palettes.png" width="720" alt="Palettes and accent colors in the settings">
+</p>
 
 No gesture needed if you prefer clicks: drop files on the Mandarin window, use **Choose files…** in the
 tray menu, or enable **Send to → Mandarin** in the Explorer context menu.
@@ -110,9 +122,49 @@ move to a folder, copy path, open in Terminal, pack into ZIP.
 - The global input hooks only observe the mouse and the trigger keys: nothing is swallowed, recorded
   or logged.
 
+## Linux and Windows 7/8
+
+There is a separate build of Mandarin for **Linux** (x64) and for **Windows 7 SP1 / 8 / 8.1** (x64). It has the same
+conversions, tools and actions, the wheel, the progress cards, the palettes and the tray icon, on an Avalonia
+interface. Both builds are self-contained: no .NET needs to be installed.
+
+<p align="center">
+  <img src="docs/screenshots/linux.png" width="720" alt="Mandarin on Linux">
+</p>
+
+How it differs from the Windows 10/11 app:
+
+- **The drag gesture** works on Windows 7/8 and in X11 sessions on Linux. Under Wayland the system does not let
+  programs see keys pressed in other windows, so open files with **Open with → Mandarin** in the file manager
+  (turn the entry on in **Settings → Desktop integration**), drop them on the Mandarin window or pick them from the
+  tray menu. In the wheel the same keys switch the modes.
+- **PDF pages** are rendered with the built-in PDFium. **Text recognition** in scans and screenshots uses
+  [Tesseract](https://github.com/tesseract-ocr/tesseract) when it is installed; face detection is only in the
+  Windows 10/11 app (areas are marked by hand).
+- **PDF from documents** is printed by LibreOffice or a Chromium-based browser (Chromium, Chrome, Edge, Brave,
+  Vivaldi) in headless mode with the network switched off.
+- **Video and audio preview** in the trim, split, speed and crop tools shows frames decoded by FFmpeg; the sound
+  plays through `ffplay` when it is installed next to FFmpeg.
+- There is no Share sheet and no shelf; actions are copy, move, copy path, terminal, show in folder and ZIP.
+- Settings live in `~/.config/Mandarin` on Linux and in `%APPDATA%\Mandarin` on Windows.
+
+**Linux:** download `Mandarin-<version>-linux-x64.tar.gz`, unpack it anywhere and run `./Mandarin`. It needs
+X11 libraries (`libx11-6 libice6 libsm6 libfontconfig1`, present on every desktop), and optionally:
+
+```bash
+sudo apt install ffmpeg tesseract-ocr tesseract-ocr-rus libreoffice
+```
+
+On a desktop without a compositor the wheel is drawn on a plain rectangle instead of floating over the screen.
+
+**Windows 7/8:** download `Mandarin-<version>-win7-x64.zip`, unpack it and run `Mandarin.exe`. Windows 7 needs
+SP1 with the *Universal C Runtime* update (KB2999226, part of the regular updates); it is built on .NET 6, the
+last .NET that supports Windows 7. LibreOffice 24.8 is the last version for Windows 7 and 8. This build has been
+tested on Windows 11 and Linux, not on a real Windows 7 computer.
+
 ## Requirements
 
-- Windows 10 2004+ or Windows 11, x64.
+- Windows 10 2004+ or Windows 11, x64 (for Linux and Windows 7/8 see above).
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (not needed for the
   self-contained build).
 - **FFmpeg** for video and audio: `winget install Gyan.FFmpeg`. Mandarin finds it automatically or you
@@ -150,7 +202,12 @@ Command line: `Mandarin.exe <files>` opens the wheel for the files, `--backgroun
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1          # dist\Mandarin
 powershell -ExecutionPolicy Bypass -File build.ps1 -Zip     # plus a release archive
+powershell -ExecutionPolicy Bypass -File build.ps1 -Linux -Zip   # dist\Mandarin-linux + .tar.gz
+powershell -ExecutionPolicy Bypass -File build.ps1 -Win7 -Zip    # dist\Mandarin-win7 + .zip
 ```
+
+The Linux and Windows 7 build checks itself: `Mandarin --selftest <empty folder>` converts generated files with
+every engine available on the computer and renders every window to PNG.
 
 Engine self-test (creates its test files only inside the given folder):
 
@@ -174,6 +231,8 @@ src/Mandarin
                  single instance, autostart, "Send to"
   UI/            wheel, progress cards, main window, shelf, tool windows
   Localization/  UI translations
+src/Mandarin.Cross        Linux and Windows 7/8 build: Avalonia interface, the same engines (linked from src/Mandarin),
+                          Platform/ (PDFium, Tesseract, headless printing, X11 and Windows drag gesture, desktop integration)
 tests/Mandarin.SelfTest   runs every conversion and tool on generated files
 ```
 

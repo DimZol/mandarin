@@ -198,7 +198,8 @@ public static class Ffmpeg
 
         await using (ct.Register(() => { try { if (!proc.HasExited) proc.Kill(true); } catch { } }))
             await proc.WaitForExitAsync(CancellationToken.None);
-        Log.Info($"ffmpeg exit {proc.ExitCode} in {sw.ElapsedMilliseconds} ms (process: {(proc.ExitTime - proc.StartTime).TotalMilliseconds:0} ms)");
+        // the start time of an exited process is unknown on Linux - the stopwatch is enough
+        Log.Info($"ffmpeg exit {proc.ExitCode} in {sw.ElapsedMilliseconds} ms");
 
         if (ct.IsCancellationRequested)
         {

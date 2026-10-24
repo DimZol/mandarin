@@ -121,8 +121,9 @@ public static class SelfCheck
             AppSettings.Current.DocumentEngine = DocumentEngine.Auto;
             return r;
         });
-        await Check("Markdown → PDF (" + (HtmlEngine.ChromiumPath != null ? "Chromium" : OfficeEngine.LibreInstalled ? "LibreOffice" : "no printer") + ")",
-            () => Convert(In("notes.md"), "pdf", output));
+        if (HtmlEngine.ChromiumPath != null || OfficeEngine.LibreInstalled)
+            await Check("Markdown → PDF (" + (HtmlEngine.ChromiumPath != null ? "Chromium" : "LibreOffice") + ")", () => Convert(In("notes.md"), "pdf", output));
+        else Console.WriteLine("- no LibreOffice or Chromium: document → PDF skipped");
         await Check("subtitles SRT → VTT", () => Convert(In("subs.srt"), "vtt", output));
         await Check("folder → ZIP", () => Convert(In("pack"), "zip", output));
         await Check("folder → TAR", () => Convert(In("pack"), "tar", output));
@@ -146,6 +147,16 @@ public static class SelfCheck
             });
         }
         else Console.WriteLine("- FFmpeg not found: media checks skipped");
+        if (WinRt.OcrAvailable)
+            await Check("OCR (Tesseract)", async () =>
+            {
+                using var img = new MagickImage(MagickColors.White, 900, 160);
+                new Drawables().FontPointSize(64).FillColor(MagickColors.Black).Text(30, 105, "Mandarin converts").Draw(img);
+                var lines = await WinRt.RecognizeAsync(img.ToByteArray(MagickFormat.Png));
+                var text = string.Join(" / ", lines.Select(l => l.Text));
+                if (!text.Contains("Mandarin")) throw new Exception("recognized: " + text);
+                return text;
+            });
         Console.WriteLine($"  OCR: {(WinRt.OcrAvailable ? WinRt.TesseractPath : "Tesseract not found")}; LibreOffice: {OfficeEngine.LibreOfficePath ?? "not found"}; browser: {HtmlEngine.ChromiumPath ?? "not found"}");
     }
 
@@ -228,7 +239,7 @@ public static class SelfCheck
             w.WindowStartupLocation = WindowStartupLocation.Manual;
             w.Position = new PixelPoint(-20000, -20000);
             // the render target is transparent: subpixel text would get colored fringes there
-            RenderOptions.SetTextRenderingMode(w, TextRenderingMode.Antialias);
+            Look.GrayscaleText(w);
             w.Show();
             await Task.Delay(waitMs);
             var content = (Control)w.Content!;
@@ -245,9 +256,7 @@ public static class SelfCheck
             var px = new PixelSize((int)(size.Width * scale), (int)(size.Height * scale));
             using var layer = new RenderTargetBitmap(px, new Vector(96 * scale, 96 * scale));
             layer.Render(content);
-            using var ms = new MemoryStream();
-            layer.Save(ms);
-            using var shot = new MagickImage(ms.ToArray());
+            using var shot = new MagickImage(Look.Png(layer));
             if (w is not WheelWindow)
             {
                 // the window background is drawn by the window itself, not by its content

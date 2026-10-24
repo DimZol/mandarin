@@ -66,7 +66,8 @@ public sealed class AppSettings
 
     [JsonIgnore]
     public static string Folder { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Mandarin");
+        // Create: on Linux ~/.config may not exist yet, and then .NET returns an empty path
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create), "Mandarin");
 
     [JsonIgnore]
     static string FilePath => Path.Combine(Folder, "settings.json");

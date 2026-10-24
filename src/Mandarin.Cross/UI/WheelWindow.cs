@@ -73,7 +73,7 @@ public sealed class WheelWindow : Window
         Width = Math.Max(_size + 60, 470);
         Height = _size + PillHeight + 24;
         FontFamily = Look.UiFont;
-        RenderOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
+        Look.GrayscaleText(this);
         WindowStartupLocation = placed ? WindowStartupLocation.Manual : WindowStartupLocation.CenterScreen;
 
         _canvas.Width = Width; _canvas.Height = Height;
