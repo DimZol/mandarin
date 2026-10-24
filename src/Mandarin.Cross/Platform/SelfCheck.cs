@@ -151,7 +151,11 @@ public static class SelfCheck
             await Check("OCR (Tesseract)", async () =>
             {
                 using var img = new MagickImage(MagickColors.White, 900, 160);
-                new Drawables().FontPointSize(64).FillColor(MagickColors.Black).Text(30, 105, "Mandarin converts").Draw(img);
+                var draw = new Drawables().FontPointSize(64).FillColor(MagickColors.Black);
+                // a minimal Linux has no fontconfig setup: point at a font file
+                var font = new[] { "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf") }.FirstOrDefault(File.Exists);
+                if (font != null) draw = draw.Font(font);
+                draw.Text(30, 105, "Mandarin converts").Draw(img);
                 var lines = await WinRt.RecognizeAsync(img.ToByteArray(MagickFormat.Png));
                 var text = string.Join(" / ", lines.Select(l => l.Text));
                 if (!text.Contains("Mandarin")) throw new Exception("recognized: " + text);
