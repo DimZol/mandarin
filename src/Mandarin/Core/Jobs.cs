@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Windows;
 
 namespace Mandarin.Core;
 
@@ -70,9 +69,8 @@ public sealed class Job : INotifyPropertyChanged
 
     void OnChanged(string? name)
     {
-        var d = Application.Current?.Dispatcher;
-        if (d == null || d.CheckAccess()) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        else d.BeginInvoke(() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name)));
+        if (UiThread.CheckAccess()) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        else UiThread.Post(() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name)));
     }
 }
 
@@ -106,9 +104,8 @@ public sealed class JobContext
 
     public void AddOutput(string path)
     {
-        var d = Application.Current?.Dispatcher;
-        if (d == null || d.CheckAccess()) _job.Outputs.Add(path);
-        else d.Invoke(() => _job.Outputs.Add(path));
+        if (UiThread.CheckAccess()) _job.Outputs.Add(path);
+        else UiThread.Invoke(() => _job.Outputs.Add(path));
     }
 }
 
@@ -128,7 +125,7 @@ public static class JobManager
     {
         var job = new Job { Title = title, Glyph = glyph, Inputs = inputs };
         var ctx = new JobContext(job);
-        Application.Current.Dispatcher.Invoke(() =>
+        UiThread.Invoke(() =>
         {
             Jobs.Insert(0, job);
             while (Jobs.Count > 60) Jobs.RemoveAt(Jobs.Count - 1);
@@ -167,7 +164,7 @@ public static class JobManager
             finally
             {
                 Slots.Release();
-                Application.Current?.Dispatcher.BeginInvoke(() => JobFinished?.Invoke(job));
+                UiThread.Post(() => JobFinished?.Invoke(job));
             }
         });
         return job;

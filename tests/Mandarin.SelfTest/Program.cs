@@ -309,7 +309,7 @@ public static class Program
         await Check("photo adjust pipeline", ctx => Task.Run(() =>
         {
             var (px, w, h) = ImageEngine.LoadBgra(photo);
-            new Mandarin.UI.Tools.PhotoAdjust { Exposure = 0.5, Contrast = 20, Saturation = 30, Vignette = 40, Sharpness = 30, Filter = 3 }.Apply(px, w, h);
+            new PhotoAdjust { Exposure = 0.5, Contrast = 20, Saturation = 30, Vignette = 40, Sharpness = 30, Filter = 3 }.Apply(px, w, h);
             var o = OutputPaths.File(photo, "jpg", " (edited)");
             ImageEngine.SaveBgra(px, w, h, o, photo);
             ctx.AddOutput(o);

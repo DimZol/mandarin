@@ -191,10 +191,11 @@ public static class ArchiveEngine
     /// </summary>
     public static void ExtractTo(string input, string destination, JobContext ctx)
     {
-        var root = Path.GetFullPath(destination).TrimEnd('\\') + "\\";
+        var sep = Path.DirectorySeparatorChar;
+        var root = Path.GetFullPath(destination).TrimEnd(sep) + sep;
         string Safe(string entryName)
         {
-            var full = Path.GetFullPath(Path.Combine(root, entryName.Replace('/', '\\').TrimStart('\\')));
+            var full = Path.GetFullPath(Path.Combine(root, entryName.Replace('\\', '/').Replace('/', sep).TrimStart(sep)));
             if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase) || full.Length == root.Length)
                 throw new UserFacingException(L.T("The archive contains unsafe paths - extraction stopped"));
             return full;

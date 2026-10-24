@@ -52,6 +52,7 @@ public static class OfficeEngine
 
     static bool ProgIdExists(string progId)
     {
+        if (!OsInfo.IsWindows) return false; // Microsoft Office exists only on Windows
         lock (ProgIds)
         {
             if (!ProgIds.TryGetValue(progId, out var ok))
@@ -67,6 +68,17 @@ public static class OfficeEngine
     {
         get
         {
+            if (!OsInfo.IsWindows)
+            {
+                var linux = new List<string>
+                {
+                    "/usr/bin/soffice", "/usr/bin/libreoffice", "/usr/local/bin/soffice", "/usr/lib/libreoffice/program/soffice",
+                    "/opt/libreoffice/program/soffice", "/snap/bin/libreoffice"
+                };
+                try { if (Directory.Exists("/opt")) linux.AddRange(Directory.GetDirectories("/opt", "libreoffice*").Select(d => Path.Combine(d, "program", "soffice"))); }
+                catch { /* no access - skip */ }
+                return linux.FirstOrDefault(File.Exists);
+            }
             // the official installer writes the path to the registry; plus the standard folders
             foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
                 foreach (var keyPath in new[] { @"SOFTWARE\LibreOffice\UNO\InstallPath", @"SOFTWARE\WOW6432Node\LibreOffice\UNO\InstallPath" })

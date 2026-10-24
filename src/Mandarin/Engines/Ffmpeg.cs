@@ -19,8 +19,8 @@ public static class Ffmpeg
 {
     static string? _ffmpeg, _ffprobe;
 
-    public static string? FfmpegPath => _ffmpeg ??= Locate("ffmpeg.exe");
-    public static string? FfprobePath => _ffprobe ??= Locate("ffprobe.exe");
+    public static string? FfmpegPath => _ffmpeg ??= Locate(OsInfo.Exe("ffmpeg"));
+    public static string? FfprobePath => _ffprobe ??= Locate(OsInfo.Exe("ffprobe"));
     public static bool Available => FfmpegPath != null && FfprobePath != null;
 
     public static void ResetCache() { _ffmpeg = null; _ffprobe = null; }
@@ -40,7 +40,7 @@ public static class Ffmpeg
         candidates.Add(Path.Combine(AppSettings.Folder, "ffmpeg", "bin", exe));
 
         // absolute PATH entries only: relative ones (".") would point at the current folder with foreign files
-        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             var d = dir.Trim('"');
             if (Path.IsPathFullyQualified(d)) candidates.Add(Path.Combine(d, exe));
@@ -56,8 +56,17 @@ public static class Ffmpeg
         }
         catch { /* no access - skip */ }
 
-        candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ffmpeg", "bin", exe));
-        candidates.Add(@"C:\ffmpeg\bin\" + exe);
+        if (OsInfo.IsWindows)
+        {
+            candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ffmpeg", "bin", exe));
+            candidates.Add(@"C:\ffmpeg\bin\" + exe);
+        }
+        else
+        {
+            // a desktop session may start Mandarin with a short PATH
+            foreach (var dir in new[] { "/usr/bin", "/usr/local/bin", "/snap/bin" })
+                candidates.Add(Path.Combine(dir, exe));
+        }
 
         return candidates.FirstOrDefault(File.Exists);
     }
@@ -65,8 +74,7 @@ public static class Ffmpeg
     public static void EnsureAvailable()
     {
         if (!Available)
-            throw new UserFacingException(
-                L.T("Video and audio need FFmpeg. Install it with \"winget install Gyan.FFmpeg\" or set its path in Mandarin settings."));
+            throw new UserFacingException(L.T("Video and audio need FFmpeg.") + " " + OsInfo.FfmpegHint);
     }
 
     static readonly Dictionary<string, MediaInfo> ProbeCache = new();
