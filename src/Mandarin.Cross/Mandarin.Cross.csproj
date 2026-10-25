@@ -16,7 +16,7 @@
     <Description>Zero-click offline file converter</Description>
     <Authors>DimZol</Authors>
     <Copyright>Copyright (c) 2026 DimZol</Copyright>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <ApplicationIcon>..\Mandarin\Assets\Mandarin.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <DefineConstants>$(DefineConstants);CROSS</DefineConstants>
@@ -70,6 +70,8 @@
     <PackageReference Include="System.Management" Version="10.0.0" />
     <!-- libraries built for .NET Standard ask for version 8 of these; .NET 6 has older ones inside -->
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" Condition="'$(TargetFramework)' == 'net6.0'" />
+    <!-- KDE Wayland: asking KWin where the pointer is (Avalonia 12 already brings this D-Bus library) -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
 </Project>

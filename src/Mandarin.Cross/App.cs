@@ -80,7 +80,7 @@ public sealed class App : Application
         CreateTray();
 
         DragGesture = new Gesture { Enabled = AppSettings.Current.DragWheelEnabled };
-        DragGesture.Triggered += (mode, x, y) => WheelWindow.ShowForDrag(mode, x, y);
+        DragGesture.Triggered += WheelWindow.ShowForDrag;
         DragGesture.ButtonReleased += WheelWindow.OnGlobalButtonReleased;
         DragGesture.Escape += WheelWindow.CloseCurrent;
 

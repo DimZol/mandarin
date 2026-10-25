@@ -135,9 +135,14 @@ interface. Both builds are self-contained: no .NET needs to be installed.
 How it differs from the Windows 10/11 app:
 
 - **The drag gesture** works on Windows 7/8 and in X11 sessions on Linux. Under Wayland the system does not let
-  programs see keys pressed in other windows, so open files with **Open with → Mandarin** in the file manager
-  (turn the entry on in **Settings → Desktop integration**), drop them on the Mandarin window or pick them from the
-  tray menu. In the wheel the same keys switch the modes.
+  programs see keys pressed in other windows, so there Mandarin reads the keyboard and the mouse from the input
+  devices themselves (only the left button, the motion and the trigger keys are looked at, nothing is recorded). That
+  needs the `input` group: `sudo usermod -aG input $USER`, then sign in again. Keep in mind that every program you
+  run can then read the keyboard too. Without it, open files with **Open with → Mandarin** in the file manager (turn
+  the entry on in **Settings → Desktop integration**), drop them on the Mandarin window or pick them from the tray
+  menu. In the wheel the same keys switch the modes.
+- **Under Wayland on KDE Plasma** the wheel opens under the pointer: KWin tells where it is through a short KWin
+  script. In other Wayland desktops the pointer position is unknown and the wheel opens in the screen center.
 - **PDF pages** are rendered with the built-in PDFium. **Text recognition** in scans and screenshots uses
   [Tesseract](https://github.com/tesseract-ocr/tesseract) when it is installed; face detection is only in the
   Windows 10/11 app (areas are marked by hand).

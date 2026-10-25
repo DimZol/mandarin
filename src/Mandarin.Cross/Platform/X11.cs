@@ -5,8 +5,8 @@ namespace Mandarin.Platform;
 
 /// <summary>
 /// The few X11 calls Mandarin needs on Linux: the pointer position and the global drag gesture (XInput2 raw events).
-/// Raw events only observe input - nothing is grabbed or swallowed. Under Wayland they reach only X11 programs,
-/// so there the gesture is unavailable and files are opened from the file manager or dropped on the window.
+/// Raw events only observe input - nothing is grabbed or swallowed. Under Wayland they reach only X11 programs and
+/// XWayland knows the pointer only over X11 windows, so there <see cref="Evdev"/> and <see cref="KWin"/> take over.
 /// </summary>
 public static class X11
 {
@@ -23,6 +23,9 @@ public static class X11
     [DllImport(LibX11)] static extern bool XQueryExtension(IntPtr display, string name, out int opcode, out int ev, out int err);
     [DllImport(LibX11)] static extern ulong XkbKeycodeToKeysym(IntPtr display, byte keycode, int group, int level);
     [DllImport(LibX11)] static extern int XFlush(IntPtr display);
+    [DllImport(LibX11)] static extern int XDefaultScreen(IntPtr display);
+    [DllImport(LibX11)] static extern int XDisplayWidth(IntPtr display, int screen);
+    [DllImport(LibX11)] static extern int XDisplayHeight(IntPtr display, int screen);
     [DllImport(LibX11)]
     static extern bool XQueryPointer(IntPtr display, IntPtr window, out IntPtr root, out IntPtr child,
         out int rootX, out int rootY, out int winX, out int winY, out uint mask);
@@ -74,10 +77,25 @@ public static class X11
         finally { XCloseDisplay(d); }
     }
 
-    public static (int x, int y)? PointerPosition() => Query() is { } q ? (q.x, q.y) : null;
+    /// <summary>The pointer position; null under Wayland, where XWayland remembers only where it left its windows.</summary>
+    public static (int x, int y)? PointerPosition() => !IsWayland && Query() is { } q ? (q.x, q.y) : null;
 
     /// <summary>The left button is held (for the wheel watchdog); null when unknown.</summary>
-    public static bool? LeftButtonDown() => Query() is { } q ? (q.mask & Button1Mask) != 0 : null;
+    public static bool? LeftButtonDown() => !IsWayland && Query() is { } q ? (q.mask & Button1Mask) != 0 : null;
+
+    /// <summary>Size of the X11 root window: the whole desktop in X11 pixels.</summary>
+    public static (int width, int height)? RootSize()
+    {
+        if (!Available) return null;
+        var d = XOpenDisplay(IntPtr.Zero);
+        if (d == IntPtr.Zero) return null;
+        try
+        {
+            var screen = XDefaultScreen(d);
+            return (XDisplayWidth(d, screen), XDisplayHeight(d, screen));
+        }
+        finally { XCloseDisplay(d); }
+    }
 
     /// <summary>Global drag gesture on X11: drag with the left button and tap a trigger key.</summary>
     public sealed class Gesture : IDisposable

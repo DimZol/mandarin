@@ -116,7 +116,7 @@ public sealed class WheelWindow : Window
 
     // ---------- Opening ----------
 
-    public static void ShowForDrag(WheelMode mode, int x, int y)
+    public static void ShowForDrag(WheelMode mode, (int x, int y)? pos)
     {
         if (Current is { _dragMode: true, _done: false } existing)
         {
@@ -124,21 +124,24 @@ public sealed class WheelWindow : Window
             return;
         }
         Current?.CloseWheel();
-        var w = new WheelWindow(mode, Array.Empty<string>(), true, x, y, true);
+        var w = new WheelWindow(mode, Array.Empty<string>(), true, pos?.x ?? 0, pos?.y ?? 0, pos != null);
         Current = w;
         w.Show();
-        Log.Info($"Wheel shown for a drag at ({x},{y})");
+        Log.Info($"Wheel shown for a drag at {(pos is { } p ? $"({p.x},{p.y})" : "the screen center")}");
     }
 
-    public static void ShowForFiles(IReadOnlyList<string> files, WheelMode mode = WheelMode.Convert)
+    public static async void ShowForFiles(IReadOnlyList<string> files, WheelMode mode = WheelMode.Convert)
     {
         Current?.CloseWheel();
-        var pos = Desktop.CursorPos();
+        // under KDE Wayland KWin is asked where the pointer is; without a position the wheel opens in the screen center
+        var pos = await Desktop.CursorPosAsync();
+        Current?.CloseWheel();
         var w = new WheelWindow(mode, files, false, pos?.x ?? 0, pos?.y ?? 0, pos != null);
         Current = w;
         w.Show();
         w.Activate();
         w.Reveal();
+        Log.Info($"Wheel shown for {files.Count} files at {(pos is { } p ? $"({p.x},{p.y})" : "the screen center")}");
     }
 
     /// <summary>Wheel for previews and screenshots: centered and visible right away.</summary>

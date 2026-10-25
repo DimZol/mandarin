@@ -5,34 +5,45 @@ namespace Mandarin.Platform;
 public enum WheelMode { Convert, Tools, Actions }
 
 /// <summary>
-/// The drag gesture of this system (Windows hooks or X11 raw events) and the trigger keys: drag a file, tap a key, the
-/// wheel opens under the pointer.
+/// The drag gesture of this system (Windows hooks, X11 raw events or the input devices under Wayland) and the trigger
+/// keys: drag a file, tap a key, the wheel opens under the pointer.
 /// </summary>
 public sealed class Gesture : IDisposable
 {
     readonly WinGesture? _win;
     readonly X11.Gesture? _x11;
+    readonly Evdev? _evdev;
 
-    /// <summary>Wheel mode and the pointer position on the screen (physical pixels).</summary>
-    public event Action<WheelMode, int, int>? Triggered;
+    /// <summary>Wheel mode and the pointer position on the screen (physical pixels; null - unknown, the wheel is centered).</summary>
+    public event Action<WheelMode, (int x, int y)?>? Triggered;
     public event Action? ButtonReleased;
     public event Action? Escape;
 
-    /// <summary>The gesture works on this system (Windows, or Linux with X11).</summary>
+    /// <summary>The gesture works on this system (Windows, Linux with X11, or Wayland with readable input devices).</summary>
     public bool Works { get; }
+
+    /// <summary>A Wayland session where the input devices cannot be read: the user is not in the "input" group.</summary>
+    public static bool NeedsInputGroup => OsInfo.IsLinux && X11.IsWayland && !Evdev.Readable();
 
     public Gesture()
     {
         if (OsInfo.IsWindows)
         {
             _win = new WinGesture();
-            _win.KeyTapped += OnKey; _win.ButtonReleased += () => ButtonReleased?.Invoke(); _win.Escape += () => Escape?.Invoke();
+            _win.KeyTapped += (x, y, vk) => OnKey((x, y), vk); _win.ButtonReleased += () => ButtonReleased?.Invoke(); _win.Escape += () => Escape?.Invoke();
             Works = _win.Install();
+        }
+        else if (X11.IsWayland)
+        {
+            // XWayland would only report the input of X11 windows: under Wayland the devices are read directly
+            _evdev = new Evdev();
+            _evdev.KeyTapped += OnKey; _evdev.ButtonReleased += () => ButtonReleased?.Invoke(); _evdev.Escape += () => Escape?.Invoke();
+            Works = _evdev.Install();
         }
         else if (X11.Available)
         {
             _x11 = new X11.Gesture();
-            _x11.KeyTapped += OnKey; _x11.ButtonReleased += () => ButtonReleased?.Invoke(); _x11.Escape += () => Escape?.Invoke();
+            _x11.KeyTapped += (x, y, vk) => OnKey((x, y), vk); _x11.ButtonReleased += () => ButtonReleased?.Invoke(); _x11.Escape += () => Escape?.Invoke();
             Works = _x11.Install();
         }
     }
@@ -43,16 +54,17 @@ public sealed class Gesture : IDisposable
         {
             if (_win != null) _win.Enabled = value;
             if (_x11 != null) _x11.Enabled = value;
+            if (_evdev != null) _evdev.Enabled = value;
         }
     }
 
-    void OnKey(int x, int y, uint vk)
+    void OnKey((int x, int y)? pos, uint vk)
     {
-        if (ModeFor(vk) is { } mode) Triggered?.Invoke(mode, x, y);
+        if (ModeFor(vk) is { } mode) Triggered?.Invoke(mode, pos);
     }
 
     /// <summary>The left mouse button is held right now; null when the system does not tell.</summary>
-    public static bool? LeftButtonDown() => OsInfo.IsWindows ? WinGesture.LeftButtonDown() : X11.LeftButtonDown();
+    public static bool? LeftButtonDown() => OsInfo.IsWindows ? WinGesture.LeftButtonDown() : X11.IsWayland ? Evdev.LeftButtonDown() : X11.LeftButtonDown();
 
     static WheelMode? ModeFor(uint vk)
     {
@@ -100,5 +112,6 @@ public sealed class Gesture : IDisposable
     {
         _win?.Dispose();
         _x11?.Dispose();
+        _evdev?.Dispose();
     }
 }

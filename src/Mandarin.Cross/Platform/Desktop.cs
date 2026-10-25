@@ -213,14 +213,17 @@ public static class Desktop
     [DllImport("user32.dll")]
     static extern bool GetCursorPos(out POINT p);
 
-    /// <summary>Pointer position on the screen in physical pixels, if the system tells it.</summary>
+    /// <summary>Pointer position on the screen in physical pixels, if the system tells it (under KDE Wayland - the last one read).</summary>
     public static (int x, int y)? CursorPos()
     {
         try
         {
             if (OsInfo.IsWindows) return GetCursorPos(out var p) ? (p.X, p.Y) : null;
-            return X11.PointerPosition();
+            return X11.IsWayland ? KWin.LastCursor : X11.PointerPosition();
         }
         catch { return null; }
     }
+
+    /// <summary>Pointer position on the screen in physical pixels; under KDE Wayland it is asked from KWin.</summary>
+    public static async Task<(int x, int y)?> CursorPosAsync() => KWin.Available ? await KWin.CursorAsync() : CursorPos();
 }

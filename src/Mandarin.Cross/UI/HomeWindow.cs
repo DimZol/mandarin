@@ -223,14 +223,14 @@ public sealed class HomeWindow : Window
         stack.Children.Add(keys);
         stack.Children.Add(Ui.Note(App.DragGesture?.Works == true
             ? L.T("Keys can be changed in settings. The wheel stays open until you release the file; release it in the center or press Esc to cancel.")
-            : X11.IsWayland
-                ? L.T("The drag gesture needs an X11 session (under Wayland the system does not let programs see the keys). In the wheel opened from the window or the file manager the same keys switch the modes.")
+            : Gesture.NeedsInputGroup
+                ? L.T("Under Wayland the system does not let programs see the keys, so the drag gesture reads the input devices directly. That needs the \"input\" group: run \"sudo usermod -aG input $USER\" and sign in again. In the wheel opened from the window or the file manager the same keys switch the modes.")
                 : L.T("In the wheel the same keys switch the modes; Esc closes it.")));
 
         stack.Children.Add(H2(L.T("Status")));
         var gestureWorks = App.DragGesture?.Works == true;
         stack.Children.Add(StatusRow(gestureWorks && AppSettings.Current.DragWheelEnabled, L.T("Wheel while dragging"),
-            !gestureWorks ? (X11.IsWayland ? L.T("Unavailable under Wayland - drop files on this window or use \"Open with → Mandarin\"") : L.T("Unavailable on this system"))
+            !gestureWorks ? (Gesture.NeedsInputGroup ? L.T("Under Wayland it needs the \"input\" group: run \"sudo usermod -aG input $USER\" and sign in again") : L.T("Unavailable on this system"))
             : AppSettings.Current.DragWheelEnabled ? L.T("On") : L.T("Off - turn it on in settings or in the tray icon menu")));
         stack.Children.Add(StatusRow(Ffmpeg.Available, L.T("FFmpeg for video and audio"), Ffmpeg.Available ? Ffmpeg.FfmpegPath! : L.T("Not found.") + " " + OsInfo.FfmpegHint));
         var native = OfficeEngine.Native(OfficeApp.Word) || OfficeEngine.Native(OfficeApp.PowerPoint);
@@ -412,7 +412,7 @@ public sealed class HomeWindow : Window
         enabled.IsCheckedChanged += (_, _) => { s.DragWheelEnabled = enabled.IsChecked == true; Save(); };
         stack.Children.Add(enabled);
         if (App.DragGesture?.Works != true)
-            stack.Children.Add(Ui.Note(X11.IsWayland ? L.T("Unavailable under Wayland - drop files on this window or use \"Open with → Mandarin\"") : L.T("Unavailable on this system")));
+            stack.Children.Add(Ui.Note(Gesture.NeedsInputGroup ? L.T("Under Wayland it needs the \"input\" group: run \"sudo usermod -aG input $USER\" and sign in again") : L.T("Unavailable on this system")));
         var keyNames = Enum.GetValues(typeof(TriggerKey)).Cast<TriggerKey>().ToList();
         ComboBox KeyBox(TriggerKey current, Action<TriggerKey> set)
         {

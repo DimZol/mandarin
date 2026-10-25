@@ -14,7 +14,7 @@
     <Description>Zero-click offline file converter for Windows 11</Description>
     <Authors>DimZol</Authors>
     <Copyright>Copyright (c) 2026 DimZol</Copyright>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <ApplicationIcon>Assets\Mandarin.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PlatformTarget>x64</PlatformTarget>
